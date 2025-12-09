@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NBA 戰情室 (雙向數據修正版)</title>
+    <title>NBA 戰情室 (v25.0 基準線版)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
@@ -16,6 +16,7 @@
             --accent: #3b82f6;
             --success: #10b981;
             --danger: #ef4444;
+            --warning: #f59e0b;
         }
         body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
@@ -51,7 +52,7 @@
         .val-low { color: var(--danger); }
         .color-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; }
 
-        /* Modal 視窗樣式 */
+        /* Modal */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.8); z-index: 1000; display: none;
@@ -63,12 +64,16 @@
             display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
         }
         .close-btn {
-            position: absolute; top: 15px; right: 20px; font-size: 24px; color: #888; cursor: pointer;
+            position: absolute; top: 15px; right: 20px; font-size: 24px; color: #888; cursor: pointer; z-index: 10;
         }
         .close-btn:hover { color: white; }
         
         .team-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #444; padding-bottom: 15px; }
         .team-logo-lg { width: 80px; height: 80px; background: white; border-radius: 50%; padding: 5px; }
+        
+        .modal-controls { display: flex; gap: 10px; margin-top: 5px; }
+        .modal-select { background: #444; border: 1px solid #555; padding: 5px 10px; color: white; border-radius: 4px; font-size: 16px; font-weight: bold; }
+
         .stat-box { background: #333; padding: 15px; border-radius: 8px; text-align: center; }
         .stat-val { font-size: 20px; font-weight: bold; color: white; }
         .stat-label { font-size: 12px; color: #aaa; margin-top: 5px; }
@@ -87,8 +92,11 @@
 <div class="container">
     <header>
         <div>
-            <h1>NBA ANALYTICS <span class="badge">V11.0</span></h1>
-            <p style="color:var(--text-muted); margin:5px 0 0;">Corrected Home/Away Stats Calculation</p>
+            <h1>NBA ANALYTICS <span class="badge">V25.0</span></h1>
+            <p style="color:var(--text-muted); margin:5px 0 0;">With 1:1 Reference Line 
+
+[Image of chart with reference line]
+</p>
         </div>
         <div style="text-align: right;">
             <div id="status" style="font-size:14px; color:var(--success);">● Live Data</div>
@@ -96,7 +104,7 @@
         </div>
     </header>
 
-    <div id="loader"><h2>⟳ 正在重算數據模型...</h2><p style='font-size:12px'>Processing Home & Away Splits...</p></div>
+    <div id="loader"><h2>⟳ 正在連線資料庫...</h2></div>
 
     <div id="main-content" style="display:none;">
         <div class="controls">
@@ -105,6 +113,14 @@
                 <select id="seasonFilter"><option value="ALL">載入中...</option></select>
             </div>
             
+            <div class="control-group">
+                <label>📈 圖表模式 (Chart Mode)</label>
+                <select id="chartMode">
+                    <option value="efficiency">🏀 攻守效率 (Off vs Def)</option>
+                    <option value="homeAway">🏠 主客戰績 (Home vs Away)</option>
+                </select>
+            </div>
+
             <div class="control-group">
                 <label>🌎 分區 (Conference)</label>
                 <select id="confFilter">
@@ -134,7 +150,9 @@
             <div class="control-group">
                 <label>📊 排序依據 (Sort By)</label>
                 <select id="metricFilter">
-                    <option value="winRate">勝率 (Win%)</option>
+                    <option value="winRate">總勝率 (Overall Win%)</option>
+                    <option value="homeWinRate">主場勝率 (Home Win%)</option>
+                    <option value="awayWinRate">客場勝率 (Away Win%)</option>
                     <option value="netRtg">淨效率值 (Net Rtg)</option>
                     <option value="offRtg">進攻效率 (Off Rtg)</option>
                     <option value="pace">比賽節奏 (Pace)</option>
@@ -144,8 +162,8 @@
 
         <div class="grid-dashboard">
             <div class="card">
-                <h3>Efficiency Landscape (點擊隊徽查看戰報)</h3>
-                <p style="font-size:12px; color:#888; margin-top:-10px;">X軸: 進攻效率 | Y軸: 防守效率 | 🖱️ 點擊隊徽開啟詳情</p>
+                <h3 id="chartTitle">Efficiency Landscape</h3>
+                <p id="chartDesc" style="font-size:12px; color:#888; margin-top:-10px;">X軸: 進攻效率 | Y軸: 防守效率 | 虛線為平衡線 (y=x)</p>
                 <div class="chart-container">
                     <canvas id="scatterChart"></canvas>
                 </div>
@@ -156,7 +174,7 @@
                 <div class="table-container">
                     <table id="statsTable">
                         <thead>
-                            <tr><th>RK</th><th>TEAM</th><th>W%</th><th>NET RTG</th></tr>
+                            <tr><th>RK</th><th>TEAM</th><th id="th-winrate">W%</th><th>NET RTG</th></tr>
                         </thead>
                         <tbody></tbody>
                     </table>
@@ -168,37 +186,40 @@
 
 <div class="modal-overlay" id="teamModal">
     <div class="modal-content">
-        <span class="close-btn" onclick="closeModal()">×</span>
+        <span class="close-btn" id="closeBtn">×</span>
         
         <div class="team-header">
             <img id="modalLogo" class="team-logo-lg" src="" alt="Team Logo">
             <div>
-                <h2 id="modalTitle" style="margin:0; color:white;">Team Name</h2>
-                <p id="modalSeason" style="margin:5px 0 0; color:var(--accent);">Season Report</p>
+                <div class="modal-controls">
+                    <select id="modalTeamSelect" class="modal-select"></select>
+                    <select id="modalSeasonSelect" class="modal-select"></select>
+                </div>
+                <p style="margin:5px 0 0; color:#888; font-size:13px;">Team Performance Report</p>
             </div>
         </div>
 
         <div>
             <h3 style="color:#aaa; border-bottom:1px solid #444; padding-bottom:5px;">📊 戰力雷達 (Vs League)</h3>
-            <div style="height:250px;">
+            <div style="position: relative; height:300px; width:100%;">
                 <canvas id="radarChart"></canvas>
             </div>
-            <p style="font-size:12px; color:#666; text-align:center;">*灰線為聯盟平均 | 藍色區域越大越強</p>
+            <p style="font-size:12px; color:#666; text-align:center;">*防守數值反轉：越外圈代表失分越少(防守越好)</p>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:20px;">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <div class="stat-box">
                     <div class="stat-val" id="valOff">--</div>
-                    <div class="stat-label">進攻效率 (Off Rtg)</div>
+                    <div class="stat-label">進攻 (Off Rtg)</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-val" id="valDef">--</div>
-                    <div class="stat-label">防守效率 (Def Rtg)</div>
+                    <div class="stat-label">防守 (Def Rtg)</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-val" id="valNet">--</div>
-                    <div class="stat-label">淨效率 (Net Rtg)</div>
+                    <div class="stat-label">淨勝 (Net Rtg)</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-val" id="valPace">--</div>
@@ -224,6 +245,8 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', () => {
+
     const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTjU7f6Fg_rLg91OktseWM2qlgyRMwDYECHX34jGqCzEfVZWlGcPy5-oZ--x-wB1kKWOv-0bZaoZfPT/pub?output=csv';
 
     const TEAM_INFO = {
@@ -264,6 +287,8 @@
         "BRK": "bkn", "CHO": "cha", "PHO": "phx"
     };
 
+    const UNIQUE_TEAMS = [...new Set(Object.keys(TEAM_INFO).filter(t => !["BRK", "CHO", "PHO"].includes(t)))].sort();
+
     let rawData = [];
     let scatterChartInstance = null;
     let radarChartInstance = null;
@@ -271,15 +296,40 @@
     let currentSeasonGames = [];
     const loadedLogos = {}; 
 
+    const safeFloat = (v) => {
+        const f = parseFloat(v);
+        return isNaN(f) ? 0 : f;
+    };
+
     window.onload = function() {
         Papa.parse(CSV_URL, {
             download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
             complete: function(results) {
                 rawData = results.data;
+                rawData.sort((a, b) => {
+                    const dateA = a.date ? String(a.date) : "0";
+                    const dateB = b.date ? String(b.date) : "0";
+                    return dateA.localeCompare(dateB);
+                });
+
                 preloadAndResizeLogos().then(() => {
                     initSeasons();
+                    initModalControls();
                     updateLastDate();
-                    updateDashboard();
+                    
+                    const bind = (id, evt, func) => { const el = document.getElementById(id); if(el) el.addEventListener(evt, func); };
+                    bind('seasonFilter', 'change', updateDashboard);
+                    bind('confFilter', 'change', updateDashboard);
+                    bind('divFilter', 'change', updateDashboard);
+                    bind('metricFilter', 'change', updateDashboard);
+                    bind('chartMode', 'change', updateDashboard);
+                    
+                    bind('teamModal', 'click', (e) => { if(e.target.id === 'teamModal') closeModal(); });
+                    bind('closeBtn', 'click', closeModal);
+                    bind('modalTeamSelect', 'change', updateModalContent);
+                    bind('modalSeasonSelect', 'change', updateModalContent);
+
+                    updateDashboard(); 
                     document.getElementById('loader').style.display = 'none';
                     document.getElementById('main-content').style.display = 'block';
                 });
@@ -318,7 +368,6 @@
     function updateLastDate() {
         const dates = rawData.map(r => r.date).filter(d => d);
         if (dates.length > 0) {
-            dates.sort();
             document.querySelector('#last-update span').textContent = dates[dates.length - 1];
         }
     }
@@ -326,87 +375,105 @@
     function initSeasons() {
         const years = new Set(rawData.map(r => r.Season_Year).filter(y => y));
         const sorted = Array.from(years).sort().reverse();
-        const sel = document.getElementById('seasonFilter');
-        sel.innerHTML = "";
+        
+        const mainSelect = document.getElementById('seasonFilter');
+        mainSelect.innerHTML = "";
         sorted.forEach(y => {
             const opt = document.createElement('option');
             opt.value = y;
             opt.textContent = `${y} 賽季`;
-            sel.appendChild(opt);
+            mainSelect.appendChild(opt);
         });
-        if(sorted.length > 0) sel.value = sorted[0];
+        if(sorted.length > 0) mainSelect.value = sorted[0];
+
+        const modalSelect = document.getElementById('modalSeasonSelect');
+        modalSelect.innerHTML = "";
+        sorted.forEach(y => {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = `${y}`;
+            modalSelect.appendChild(opt);
+        });
     }
 
-    // 🔥 核心修正：雙向統計 (同時統計主隊與客隊數據)
+    function initModalControls() {
+        const teamSelect = document.getElementById('modalTeamSelect');
+        teamSelect.innerHTML = "";
+        UNIQUE_TEAMS.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = t;
+            teamSelect.appendChild(opt);
+        });
+    }
+
     function calculateStats(data) {
         const teams = {};
         
-        // 輔助函式：更新球隊數據
-        const updateTeam = (name, pts, oppPts, offRtg, defRtg, pace, isWin) => {
-            if (!teams[name]) teams[name] = { name: name, gp: 0, wins: 0, sumOff: 0, sumDef: 0, sumPace: 0 };
+        const updateTeam = (name, offRtg, defRtg, pace) => {
+            if (!teams[name]) teams[name] = { 
+                name: name, gp: 0, wins: 0, 
+                homeG: 0, homeW: 0, awayG: 0, awayW: 0,
+                off: 0, def: 0, pace: 0 
+            };
             teams[name].gp++;
-            if (isWin) teams[name].wins++;
             
-            // 如果 CSV 有提供進階數據就用，沒有就用 0 避免報錯
-            teams[name].sumOff += (offRtg || 0);
-            teams[name].sumDef += (defRtg || 0);
-            teams[name].sumPace += (pace || 0);
+            if(offRtg) teams[name].off = safeFloat(offRtg);
+            if(defRtg) teams[name].def = safeFloat(defRtg);
+            if(pace) teams[name].pace = safeFloat(pace);
         };
 
         data.forEach(row => {
-            // 1. 處理主隊 (Team_Abbr)
             if (row.Team_Abbr) {
-                const isHomeWin = row.pts > row.opp_pts;
-                updateTeam(
-                    row.Team_Abbr, 
-                    row.pts, 
-                    row.opp_pts, 
-                    row.Before_Game_Avg_OffRtg, 
-                    row.Before_Game_Avg_DefRtg, 
-                    row.Before_Game_Avg_Pace, 
-                    isHomeWin
-                );
+                updateTeam(row.Team_Abbr, row.Before_Game_Avg_OffRtg, row.Before_Game_Avg_DefRtg, row.Before_Game_Avg_Pace);
+                const t = teams[row.Team_Abbr];
+                t.homeG++;
+                if (row.pts > row.opp_pts) {
+                    t.wins++;
+                    t.homeW++;
+                }
             }
-
-            // 2. 處理客隊 (Opp_Abbr) - 你的 CSV 剛好有 Opp_Before_Game 欄位！
             if (row.Opp_Abbr) {
-                const isAwayWin = row.opp_pts > row.pts; // 客隊得分 > 主隊得分
-                updateTeam(
-                    row.Opp_Abbr, 
-                    row.opp_pts, 
-                    row.pts, 
-                    row.Opp_Before_Game_Avg_OffRtg, 
-                    row.Opp_Before_Game_Avg_DefRtg, 
-                    row.Opp_Before_Game_Avg_Pace, 
-                    isAwayWin
-                );
+                updateTeam(row.Opp_Abbr, row.Opp_Before_Game_Avg_OffRtg, row.Opp_Before_Game_Avg_DefRtg, row.Opp_Before_Game_Avg_Pace);
+                const t = teams[row.Opp_Abbr];
+                t.awayG++;
+                if (row.opp_pts > row.pts) {
+                    t.wins++;
+                    t.awayW++;
+                }
             }
         });
 
         return Object.values(teams).map(t => {
             const info = TEAM_INFO[t.name] || { color: "#999", conf: "Unknown", div: "Unknown" };
-            // 避免除以零
-            const gp = t.gp || 1; 
-            const off = t.sumOff / gp;
-            const def = t.sumDef / gp;
-            const pace = t.sumPace / gp;
-            
+            const gp = t.gp || 1;
+            const homeG = t.homeG || 1;
+            const awayG = t.awayG || 1;
+
+            const homeWinRate = (t.homeW / homeG * 100);
+            const awayWinRate = (t.awayW / awayG * 100);
+
             return {
                 name: t.name,
-                winRate: (t.wins / gp * 100).toFixed(1),
-                offRtg: off.toFixed(1),
-                defRtg: def.toFixed(1),
-                netRtg: (off - def).toFixed(1),
-                pace: pace.toFixed(1),
+                winRate: (t.wins/gp*100).toFixed(1),
+                homeWinRate: homeWinRate.toFixed(1),
+                awayWinRate: awayWinRate.toFixed(1),
+                offRtg: t.off.toFixed(1),
+                defRtg: t.def.toFixed(1),
+                netRtg: (t.off - t.def).toFixed(1),
+                pace: t.pace.toFixed(1),
                 color: info.color,
                 conf: info.conf,
                 div: info.div,
                 pointStyle: loadedLogos[t.name] || 'circle', 
-                _winRate: t.wins / gp,
-                _netRtg: off - def,
-                _offRtg: off,
-                _defRtg: def,
-                _pace: pace
+                
+                _winRate: t.wins/gp,
+                _homeWinRate: t.homeG > 0 ? t.homeW/t.homeG : 0,
+                _awayWinRate: t.awayG > 0 ? t.awayW/t.awayG : 0,
+                _netRtg: t.off - t.def,
+                _offRtg: t.off,
+                _defRtg: t.def,
+                _pace: t.pace
             };
         });
     }
@@ -416,11 +483,9 @@
         const confFilter = document.getElementById('confFilter').value;
         const divFilter = document.getElementById('divFilter').value;
         const metric = document.getElementById('metricFilter').value;
+        const chartMode = document.getElementById('chartMode').value;
         
-        // 儲存原始比賽資料
         currentSeasonGames = rawData.filter(r => r.Season_Year == season);
-        
-        // 計算統計 (現在會包含主場與客場的所有場次)
         let stats = calculateStats(currentSeasonGames);
         currentStats = stats;
 
@@ -428,161 +493,233 @@
         if (confFilter !== 'ALL') filteredStats = filteredStats.filter(t => t.conf === confFilter);
         if (divFilter !== 'ALL') filteredStats = filteredStats.filter(t => t.div === divFilter);
 
-        const sortMap = { "winRate": "_winRate", "netRtg": "_netRtg", "offRtg": "offRtg", "pace": "offRtg" }; 
-        filteredStats.sort((a, b) => b[sortMap[metric]] - a[sortMap[metric]]);
+        let sortKey = "_winRate";
+        if (metric === 'homeWinRate') sortKey = "_homeWinRate";
+        if (metric === 'awayWinRate') sortKey = "_awayWinRate";
+        if (metric === 'netRtg') sortKey = "_netRtg";
+        if (metric === 'offRtg') sortKey = "_offRtg";
+        if (metric === 'pace') sortKey = "_pace";
 
-        renderScatterChart(filteredStats);
-        renderStatsTable(filteredStats);
+        filteredStats.sort((a, b) => b[sortKey] - a[sortKey]);
+
+        renderScatterChart(filteredStats, chartMode);
+        renderStatsTable(filteredStats, metric);
     }
 
-    function renderScatterChart(stats) {
+    function renderScatterChart(stats, mode) {
         const ctx = document.getElementById('scatterChart').getContext('2d');
-        const points = stats.map(t => ({ x: t.offRtg, y: t.defRtg, team: t.name, pointStyle: t.pointStyle }));
-
         if (scatterChartInstance) scatterChartInstance.destroy();
+
+        const chartTitle = document.getElementById('chartTitle');
+        const chartDesc = document.getElementById('chartDesc');
+        let points = [], xLabel, yLabel, revY = false;
+        
+        // 🔥 動態基準線計算
+        let lineStart, lineEnd;
+
+        if (mode === 'homeAway') {
+            chartTitle.textContent = "Home vs Away Performance (主客場戰績)";
+            chartDesc.textContent = "X軸: 主場勝率 | Y軸: 客場勝率 | 虛線上方為客場更強";
+            xLabel = "Home Win% (主場勝率)"; 
+            yLabel = "Away Win% (客場勝率)";
+            
+            points = stats.map(t => ({ x: t._homeWinRate * 100, y: t._awayWinRate * 100, team: t.name, pointStyle: t.pointStyle }));
+            lineStart = {x: 0, y: 0}; lineEnd = {x: 100, y: 100};
+        } else {
+            chartTitle.textContent = "Efficiency Landscape (攻守效率)";
+            chartDesc.textContent = "X軸: 進攻效率 | Y軸: 防守效率 | 虛線右上方為強權 (淨勝分 > 0)";
+            xLabel = "Off Rtg (進攻)"; 
+            yLabel = "Def Rtg (防守)"; 
+            revY = true;
+
+            points = stats.map(t => ({ x: t._offRtg, y: t._defRtg, team: t.name, pointStyle: t.pointStyle }));
+            
+            // 自動計算範圍
+            const allVals = points.map(p => p.x).concat(points.map(p => p.y));
+            const minVal = Math.floor(Math.min(...allVals) - 2);
+            const maxVal = Math.ceil(Math.max(...allVals) + 2);
+            lineStart = {x: minVal, y: minVal}; lineEnd = {x: maxVal, y: maxVal};
+        }
+
+        // 🔥 新增基準線 Dataset
+        const referenceLine = {
+            label: '1:1 Reference',
+            data: [lineStart, lineEnd],
+            type: 'line',
+            borderColor: '#555',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false,
+            zIndex: 0
+        };
 
         scatterChartInstance = new Chart(ctx, {
             type: 'scatter',
             data: {
                 labels: stats.map(t => t.name),
-                datasets: [{
-                    label: 'Team Data',
-                    data: points,
-                    pointStyle: (ctx) => ctx.raw.pointStyle, 
-                    pointRadius: 6,       
-                    pointHoverRadius: 10,
-                    borderWidth: 0
-                }]
+                datasets: [
+                    {
+                        label: 'Team Data',
+                        data: points,
+                        pointStyle: (ctx) => ctx.raw.pointStyle, 
+                        pointRadius: 6,       
+                        pointHoverRadius: 10,
+                        borderWidth: 0,
+                        zIndex: 2
+                    },
+                    referenceLine
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 onClick: (evt, elements) => {
-                    if (elements.length > 0) {
-                        const index = elements[0].index;
-                        const teamName = stats[index].name;
-                        openTeamModal(teamName);
+                    if (elements.length > 0 && elements[0].datasetIndex === 0) {
+                        openTeamModal(stats[elements[0].index].name);
                     }
                 },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            label: function(ctx) { return `${ctx.raw.team}`; }
+                            label: function(ctx) { 
+                                if(ctx.dataset.type === 'line') return null;
+                                const p = ctx.raw;
+                                return `${p.team}: X=${p.x.toFixed(1)}, Y=${p.y.toFixed(1)}`; 
+                            }
                         },
                         backgroundColor: 'rgba(0,0,0,0.9)',
                         titleFont: { size: 14 }
                     }
                 },
                 scales: {
-                    x: { title: { display: true, text: '進攻效率', color: '#aaa' }, grid: { color: '#333' } },
-                    y: { title: { display: true, text: '防守效率', color: '#aaa' }, grid: { color: '#333' }, reverse: true }
+                    x: { title: { display: true, text: xLabel, color: '#aaa' }, grid: { color: '#333' } },
+                    y: { 
+                        title: { display: true, text: yLabel, color: '#aaa' }, 
+                        grid: { color: '#333' }, 
+                        reverse: revY 
+                    }
                 }
             }
         });
     }
 
-    function renderStatsTable(stats) {
+    function renderStatsTable(stats, currentMetric) {
         const tbody = document.querySelector("#statsTable tbody");
+        const thWinRate = document.getElementById('th-winrate');
+        
+        if (currentMetric === 'homeWinRate') {
+            thWinRate.textContent = "HOME W%";
+            thWinRate.style.color = "var(--success)";
+        } else if (currentMetric === 'awayWinRate') {
+            thWinRate.textContent = "AWAY W%";
+            thWinRate.style.color = "var(--danger)";
+        } else {
+            thWinRate.textContent = "W%";
+            thWinRate.style.color = "var(--text-muted)";
+        }
+
         tbody.innerHTML = "";
         stats.forEach((t, i) => {
             const netClass = t.netRtg > 0 ? 'val-high' : 'val-low';
+            
+            let displayWinRate = t.winRate;
+            if (currentMetric === 'homeWinRate') displayWinRate = t.homeWinRate;
+            if (currentMetric === 'awayWinRate') displayWinRate = t.awayWinRate;
+
             tbody.innerHTML += `<tr>
                 <td style="color:#666">${i+1}</td>
                 <td class="team-name"><span class="color-dot" style="background:${t.color}"></span>${t.name}</td>
-                <td>${t.winRate}%</td>
+                <td style="font-weight:bold">${displayWinRate}%</td>
                 <td class="${netClass}">${t.netRtg > 0 ? '+'+t.netRtg : t.netRtg}</td>
             </tr>`;
         });
     }
 
-    // ================= 戰報視窗邏輯 (修正版) =================
-
     function openTeamModal(teamName) {
-        const teamData = currentStats.find(t => t.name === teamName);
-        if (!teamData) return;
+        const currentSeason = document.getElementById('seasonFilter').value;
+        document.getElementById('modalTeamSelect').value = teamName;
+        document.getElementById('modalSeasonSelect').value = currentSeason;
+        document.getElementById('teamModal').style.display = 'flex';
+        updateModalContent();
+    }
 
-        document.getElementById('modalTitle').textContent = teamName;
-        document.getElementById('modalSeason').textContent = document.getElementById('seasonFilter').value + " Season Report";
-        document.getElementById('modalLogo').src = `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${(URL_MAP[teamName]||teamName).toLowerCase()}.png`;
+    function updateModalContent() {
+        const selectedTeam = document.getElementById('modalTeamSelect').value;
+        const selectedSeason = document.getElementById('modalSeasonSelect').value;
+        const modalSeasonGames = rawData.filter(r => r.Season_Year == selectedSeason);
+        const seasonStats = calculateStats(modalSeasonGames);
+        const teamData = seasonStats.find(t => t.name === selectedTeam);
 
+        if (!teamData) { return; }
+
+        document.getElementById('modalLogo').src = `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${(URL_MAP[selectedTeam]||selectedTeam).toLowerCase()}.png`;
         document.getElementById('valOff').textContent = teamData.offRtg;
         document.getElementById('valDef').textContent = teamData.defRtg;
         document.getElementById('valNet').textContent = (teamData.netRtg > 0 ? '+':'') + teamData.netRtg;
         document.getElementById('valPace').textContent = teamData.pace;
 
-        // 🔥 核心修正：主客場勝率計算 🔥
-        // 必須同時檢查 Team_Abbr (主場) 和 Opp_Abbr (客場)
-        let homeW=0, homeG=0, awayW=0, awayG=0;
+        const homePct = Math.round(teamData._homeWinRate * 100);
+        const awayPct = Math.round(teamData._awayWinRate * 100);
 
-        currentSeasonGames.forEach(g => {
-            // Case 1: 當該隊是主隊
-            if (g.Team_Abbr === teamName) {
+        let homeW=0, homeG=0, awayW=0, awayG=0;
+        modalSeasonGames.forEach(g => {
+            if (g.Team_Abbr === selectedTeam) {
                 homeG++;
                 if (g.pts > g.opp_pts) homeW++;
             }
-            // Case 2: 當該隊是客隊
-            else if (g.Opp_Abbr === teamName) {
+            else if (g.Opp_Abbr === selectedTeam) {
                 awayG++;
-                if (g.opp_pts > g.pts) awayW++; // 客場勝：客隊分數 > 主隊分數
+                if (g.opp_pts > g.pts) awayW++; 
             }
         });
-
-        const homePct = homeG>0 ? Math.round(homeW/homeG*100) : 0;
-        const awayPct = awayG>0 ? Math.round(awayW/awayG*100) : 0;
 
         document.getElementById('homeWinVal').textContent = `${homePct}% (${homeW}-${homeG-homeW})`;
         document.getElementById('homeBar').style.width = homePct + "%";
         document.getElementById('awayWinVal').textContent = `${awayPct}% (${awayW}-${awayG-awayW})`;
         document.getElementById('awayBar').style.width = awayPct + "%";
 
-        renderRadarChart(teamData);
-        document.getElementById('teamModal').style.display = 'flex';
+        renderRadarChart(teamData, seasonStats);
     }
 
     function closeModal() {
         document.getElementById('teamModal').style.display = 'none';
     }
 
-    function renderRadarChart(teamData) {
+    function renderRadarChart(teamData, allStats) {
         const ctx = document.getElementById('radarChart').getContext('2d');
         if (radarChartInstance) radarChartInstance.destroy();
 
-        // 聯盟平均值與極值 (用於正規化)
-        const allOff = currentStats.map(t => t._offRtg);
-        const allDef = currentStats.map(t => t._defRtg);
-        const allWin = currentStats.map(t => t._winRate);
-        const allNet = currentStats.map(t => t._netRtg);
-        const allPace = currentStats.map(t => t._pace);
+        const validStats = allStats.filter(t => !isNaN(t._offRtg) && !isNaN(t._defRtg));
+        
+        const maxOff = Math.max(...validStats.map(t => t._offRtg)) || 120;
+        const minOff = Math.min(...validStats.map(t => t._offRtg)) || 100;
+        const maxDef = Math.max(...validStats.map(t => t._defRtg)) || 120; 
+        const minDef = Math.min(...validStats.map(t => t._defRtg)) || 100; 
+        const maxWin = Math.max(...validStats.map(t => t._winRate)) || 1;
+        const minWin = Math.min(...validStats.map(t => t._winRate)) || 0;
+        const maxNet = Math.max(...validStats.map(t => t._netRtg)) || 15; 
+        const minNet = Math.min(...validStats.map(t => t._netRtg)) || -15;
+        const maxPace = Math.max(...validStats.map(t => t._pace)) || 105; 
+        const minPace = Math.min(...validStats.map(t => t._pace)) || 90;
 
-        const maxOff = Math.max(...allOff); const minOff = Math.min(...allOff);
-        const maxDef = Math.max(...allDef); const minDef = Math.min(...allDef); // 注意防守反轉
-        const maxWin = Math.max(...allWin); const minWin = Math.min(...allWin);
-        const avgNet = allNet.reduce((a,b)=>a+b,0)/allNet.length; // 平均淨勝分
-
-        // 0-100 正規化函式
         const norm = (val, min, max) => {
             if (max === min) return 50;
-            return (val - min) / (max - min) * 100;
+            let res = (val - min) / (max - min) * 100;
+            return Math.max(0, Math.min(100, res)); 
         };
-        // 防守反轉 (數值越低越好 -> 分數越高)
         const normRev = (val, min, max) => {
             if (max === min) return 50;
-            return (max - val) / (max - min) * 100;
+            let res = (max - val) / (max - min) * 100;
+            return Math.max(0, Math.min(100, res));
         };
 
         const scoreOff = norm(teamData._offRtg, minOff, maxOff);
         const scoreDef = normRev(teamData._defRtg, minDef, maxDef);
         const scoreWin = norm(teamData._winRate, minWin, maxWin);
-        // NetRtg 和 Pace 比較特殊，用固定範圍或標準差會更好，這裡簡化用極值
-        const maxNet = Math.max(...allNet); const minNet = Math.min(...allNet);
-        const maxPace = Math.max(...allPace); const minPace = Math.min(...allPace);
-        
         const scoreNet = norm(teamData._netRtg, minNet, maxNet); 
         const scorePace = norm(teamData._pace, minPace, maxPace);
-
-        // 聯盟平均線 (永遠是 50 左右)
-        const avgLine = [50, 50, 50, 50, 50]; 
 
         radarChartInstance = new Chart(ctx, {
             type: 'radar',
@@ -599,7 +736,7 @@
                     },
                     {
                         label: 'League Avg',
-                        data: avgLine,
+                        data: [50, 50, 50, 50, 50],
                         borderColor: '#666',
                         borderDash: [5, 5],
                         borderWidth: 1,
@@ -610,13 +747,14 @@
                 ]
             },
             options: {
+                maintainAspectRatio: false,
                 scales: {
                     r: {
-                        angleLines: { color: '#444' },
-                        grid: { color: '#444' },
+                        angleLines: { color: '#777' },
+                        grid: { color: '#777' },
                         pointLabels: { color: '#ccc', font: { size: 12 } },
-                        suggestedMin: 10,
-                        suggestedMax: 90,
+                        suggestedMin: 0,
+                        suggestedMax: 100,
                         ticks: { display: false }
                     }
                 },
@@ -633,7 +771,9 @@
     document.getElementById('confFilter').addEventListener('change', updateDashboard);
     document.getElementById('divFilter').addEventListener('change', updateDashboard);
     document.getElementById('metricFilter').addEventListener('change', updateDashboard);
+    document.getElementById('chartMode').addEventListener('change', updateDashboard);
 
+});
 </script>
 
 </body>
