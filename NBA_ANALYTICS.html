@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA 戰情室 (雙向數據修正版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --accent: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #333; }
+        h1 { margin: 0; font-weight: 700; color: white; letter-spacing: 1px; }
+        .badge { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight:bold; vertical-align: middle; }
+        .data-date { font-size: 14px; color: var(--text-muted); margin-top: 5px; }
+        .data-date span { color: var(--accent); font-weight: bold; }
+
+        .controls { 
+            display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; 
+            background: #252525; padding: 15px; border-radius: 8px; border: 1px solid #333;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        .control-group label { font-size: 12px; color: var(--text-muted); font-weight: bold; }
+        select { background: #333; color: white; border: 1px solid #444; padding: 8px 12px; border-radius: 4px; font-size: 14px; outline: none; min-width: 140px; }
+        select:hover { border-color: var(--accent); }
+
+        .grid-dashboard { display: grid; grid-template-columns: 2fr 1fr; gap: 25px; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 100%; box-sizing: border-box; }
+        .card h3 { margin-top: 0; color: var(--text-muted); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }
+
+        .chart-container { position: relative; height: 600px; width: 100%; }
+        .table-container { overflow-x: auto; max-height: 600px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { text-align: left; padding: 12px; background: #252525; color: var(--text-muted); position: sticky; top: 0; }
+        td { padding: 12px; border-bottom: 1px solid #333; vertical-align: middle; }
+        tr:hover { background: #2a2a2a; }
+        .team-name { font-weight: bold; color: white; display: flex; align-items: center; }
+        
+        .val-high { color: var(--success); }
+        .val-low { color: var(--danger); }
+        .color-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; }
+
+        /* Modal 視窗樣式 */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 1000; display: none;
+            justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: #252525; width: 90%; max-width: 800px; border-radius: 12px; padding: 30px;
+            position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
+        }
+        .close-btn {
+            position: absolute; top: 15px; right: 20px; font-size: 24px; color: #888; cursor: pointer;
+        }
+        .close-btn:hover { color: white; }
+        
+        .team-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #444; padding-bottom: 15px; }
+        .team-logo-lg { width: 80px; height: 80px; background: white; border-radius: 50%; padding: 5px; }
+        .stat-box { background: #333; padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-val { font-size: 20px; font-weight: bold; color: white; }
+        .stat-label { font-size: 12px; color: #aaa; margin-top: 5px; }
+        .split-bar { height: 8px; background: #444; border-radius: 4px; overflow: hidden; margin-top: 5px; }
+        .split-fill { height: 100%; background: var(--accent); }
+
+        #loader { text-align: center; margin-top: 50px; color: var(--accent); }
+        @media (max-width: 1024px) { 
+            .grid-dashboard { grid-template-columns: 1fr; } 
+            .modal-content { grid-template-columns: 1fr; max-height: 90vh; overflow-y: auto; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div>
+            <h1>NBA ANALYTICS <span class="badge">V11.0</span></h1>
+            <p style="color:var(--text-muted); margin:5px 0 0;">Corrected Home/Away Stats Calculation</p>
+        </div>
+        <div style="text-align: right;">
+            <div id="status" style="font-size:14px; color:var(--success);">● Live Data</div>
+            <div id="last-update" class="data-date">數據統計截至: <span>讀取中...</span></div>
+        </div>
+    </header>
+
+    <div id="loader"><h2>⟳ 正在重算數據模型...</h2><p style='font-size:12px'>Processing Home & Away Splits...</p></div>
+
+    <div id="main-content" style="display:none;">
+        <div class="controls">
+            <div class="control-group">
+                <label>📅 賽季 (Season)</label>
+                <select id="seasonFilter"><option value="ALL">載入中...</option></select>
+            </div>
+            
+            <div class="control-group">
+                <label>🌎 分區 (Conference)</label>
+                <select id="confFilter">
+                    <option value="ALL">全部 (All)</option>
+                    <option value="East">東區 (Eastern)</option>
+                    <option value="West">西區 (Western)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>🚩 分組 (Division)</label>
+                <select id="divFilter">
+                    <option value="ALL">全部 (All)</option>
+                    <optgroup label="東區 (East)">
+                        <option value="Atlantic">大西洋組 (Atlantic)</option>
+                        <option value="Central">中央組 (Central)</option>
+                        <option value="Southeast">東南組 (Southeast)</option>
+                    </optgroup>
+                    <optgroup label="西區 (West)">
+                        <option value="Northwest">西北組 (Northwest)</option>
+                        <option value="Pacific">太平洋組 (Pacific)</option>
+                        <option value="Southwest">西南組 (Southwest)</option>
+                    </optgroup>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>📊 排序依據 (Sort By)</label>
+                <select id="metricFilter">
+                    <option value="winRate">勝率 (Win%)</option>
+                    <option value="netRtg">淨效率值 (Net Rtg)</option>
+                    <option value="offRtg">進攻效率 (Off Rtg)</option>
+                    <option value="pace">比賽節奏 (Pace)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grid-dashboard">
+            <div class="card">
+                <h3>Efficiency Landscape (點擊隊徽查看戰報)</h3>
+                <p style="font-size:12px; color:#888; margin-top:-10px;">X軸: 進攻效率 | Y軸: 防守效率 | 🖱️ 點擊隊徽開啟詳情</p>
+                <div class="chart-container">
+                    <canvas id="scatterChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Team Rankings</h3>
+                <div class="table-container">
+                    <table id="statsTable">
+                        <thead>
+                            <tr><th>RK</th><th>TEAM</th><th>W%</th><th>NET RTG</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="teamModal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">×</span>
+        
+        <div class="team-header">
+            <img id="modalLogo" class="team-logo-lg" src="" alt="Team Logo">
+            <div>
+                <h2 id="modalTitle" style="margin:0; color:white;">Team Name</h2>
+                <p id="modalSeason" style="margin:5px 0 0; color:var(--accent);">Season Report</p>
+            </div>
+        </div>
+
+        <div>
+            <h3 style="color:#aaa; border-bottom:1px solid #444; padding-bottom:5px;">📊 戰力雷達 (Vs League)</h3>
+            <div style="height:250px;">
+                <canvas id="radarChart"></canvas>
+            </div>
+            <p style="font-size:12px; color:#666; text-align:center;">*灰線為聯盟平均 | 藍色區域越大越強</p>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:20px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div class="stat-box">
+                    <div class="stat-val" id="valOff">--</div>
+                    <div class="stat-label">進攻效率 (Off Rtg)</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="valDef">--</div>
+                    <div class="stat-label">防守效率 (Def Rtg)</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="valNet">--</div>
+                    <div class="stat-label">淨效率 (Net Rtg)</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="valPace">--</div>
+                    <div class="stat-label">節奏 (Pace)</div>
+                </div>
+            </div>
+
+            <div class="stat-box" style="text-align:left;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span style="color:#aaa; font-size:12px;">主場勝率 (Home)</span>
+                    <span id="homeWinVal" style="color:white; font-weight:bold;">--%</span>
+                </div>
+                <div class="split-bar"><div id="homeBar" class="split-fill" style="width:0%"></div></div>
+                
+                <div style="display:flex; justify-content:space-between; margin-top:15px; margin-bottom:5px;">
+                    <span style="color:#aaa; font-size:12px;">客場勝率 (Away)</span>
+                    <span id="awayWinVal" style="color:white; font-weight:bold;">--%</span>
+                </div>
+                <div class="split-bar"><div id="awayBar" class="split-fill" style="width:0%; background:#ef4444;"></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTjU7f6Fg_rLg91OktseWM2qlgyRMwDYECHX34jGqCzEfVZWlGcPy5-oZ--x-wB1kKWOv-0bZaoZfPT/pub?output=csv';
+
+    const TEAM_INFO = {
+        "ATL": { color: "#E03A3E", conf: "East", div: "Southeast" },
+        "BOS": { color: "#007A33", conf: "East", div: "Atlantic" },
+        "BKN": { color: "#FFFFFF", conf: "East", div: "Atlantic" }, "BRK": { color: "#FFFFFF", conf: "East", div: "Atlantic" },
+        "CHA": { color: "#1D1160", conf: "East", div: "Southeast" }, "CHO": { color: "#1D1160", conf: "East", div: "Southeast" },
+        "CHI": { color: "#CE1141", conf: "East", div: "Central" },
+        "CLE": { color: "#860038", conf: "East", div: "Central" },
+        "DET": { color: "#C8102E", conf: "East", div: "Central" },
+        "IND": { color: "#FDBB30", conf: "East", div: "Central" },
+        "MIA": { color: "#98002E", conf: "East", div: "Southeast" },
+        "MIL": { color: "#00471B", conf: "East", div: "Central" },
+        "NYK": { color: "#F58426", conf: "East", div: "Atlantic" },
+        "ORL": { color: "#0077C0", conf: "East", div: "Southeast" },
+        "PHI": { color: "#006BB6", conf: "East", div: "Atlantic" },
+        "TOR": { color: "#CE1141", conf: "East", div: "Atlantic" },
+        "WAS": { color: "#002B5C", conf: "East", div: "Southeast" },
+        "DAL": { color: "#00538C", conf: "West", div: "Southwest" },
+        "DEN": { color: "#FEC524", conf: "West", div: "Northwest" },
+        "GSW": { color: "#1D428A", conf: "West", div: "Pacific" },
+        "HOU": { color: "#CE1141", conf: "West", div: "Southwest" },
+        "LAC": { color: "#C8102E", conf: "West", div: "Pacific" },
+        "LAL": { color: "#552583", conf: "West", div: "Pacific" },
+        "MEM": { color: "#5D76A9", conf: "West", div: "Southwest" },
+        "MIN": { color: "#236192", conf: "West", div: "Northwest" },
+        "NOP": { color: "#0C2340", conf: "West", div: "Southwest" },
+        "OKC": { color: "#007AC1", conf: "West", div: "Northwest" },
+        "PHX": { color: "#E56020", conf: "West", div: "Pacific" }, "PHO": { color: "#E56020", conf: "West", div: "Pacific" },
+        "POR": { color: "#E03A3E", conf: "West", div: "Northwest" },
+        "SAC": { color: "#5A2D81", conf: "West", div: "Pacific" },
+        "SAS": { color: "#C4CED4", conf: "West", div: "Southwest" },
+        "UTA": { color: "#002B5C", conf: "West", div: "Northwest" }
+    };
+
+    const URL_MAP = {
+        "UTA": "utah", "NOP": "no", "NYK": "ny", "SAS": "sa", "GSW": "gs", "WAS": "wsh",
+        "BRK": "bkn", "CHO": "cha", "PHO": "phx"
+    };
+
+    let rawData = [];
+    let scatterChartInstance = null;
+    let radarChartInstance = null;
+    let currentStats = []; 
+    let currentSeasonGames = [];
+    const loadedLogos = {}; 
+
+    window.onload = function() {
+        Papa.parse(CSV_URL, {
+            download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
+            complete: function(results) {
+                rawData = results.data;
+                preloadAndResizeLogos().then(() => {
+                    initSeasons();
+                    updateLastDate();
+                    updateDashboard();
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('main-content').style.display = 'block';
+                });
+            }
+        });
+    };
+
+    function preloadAndResizeLogos() {
+        const promises = Object.keys(TEAM_INFO).map(teamAbbr => {
+            return new Promise((resolve, reject) => {
+                const urlAbbr = URL_MAP[teamAbbr] || teamAbbr.toLowerCase();
+                const img = new Image();
+                img.crossOrigin = "Anonymous"; 
+                img.src = `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${urlAbbr}.png`;
+                img.onload = () => { 
+                    const size = 40; 
+                    const canvas = document.createElement('canvas');
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext('2d');
+                    ctx.beginPath();
+                    ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+                    ctx.fillStyle = "white"; 
+                    ctx.fill();
+                    const padding = 5;
+                    ctx.drawImage(img, padding, padding, size - padding*2, size - padding*2);
+                    loadedLogos[teamAbbr] = canvas; 
+                    resolve(); 
+                };
+                img.onerror = () => { resolve(); };
+            });
+        });
+        return Promise.all(promises);
+    }
+
+    function updateLastDate() {
+        const dates = rawData.map(r => r.date).filter(d => d);
+        if (dates.length > 0) {
+            dates.sort();
+            document.querySelector('#last-update span').textContent = dates[dates.length - 1];
+        }
+    }
+
+    function initSeasons() {
+        const years = new Set(rawData.map(r => r.Season_Year).filter(y => y));
+        const sorted = Array.from(years).sort().reverse();
+        const sel = document.getElementById('seasonFilter');
+        sel.innerHTML = "";
+        sorted.forEach(y => {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = `${y} 賽季`;
+            sel.appendChild(opt);
+        });
+        if(sorted.length > 0) sel.value = sorted[0];
+    }
+
+    // 🔥 核心修正：雙向統計 (同時統計主隊與客隊數據)
+    function calculateStats(data) {
+        const teams = {};
+        
+        // 輔助函式：更新球隊數據
+        const updateTeam = (name, pts, oppPts, offRtg, defRtg, pace, isWin) => {
+            if (!teams[name]) teams[name] = { name: name, gp: 0, wins: 0, sumOff: 0, sumDef: 0, sumPace: 0 };
+            teams[name].gp++;
+            if (isWin) teams[name].wins++;
+            
+            // 如果 CSV 有提供進階數據就用，沒有就用 0 避免報錯
+            teams[name].sumOff += (offRtg || 0);
+            teams[name].sumDef += (defRtg || 0);
+            teams[name].sumPace += (pace || 0);
+        };
+
+        data.forEach(row => {
+            // 1. 處理主隊 (Team_Abbr)
+            if (row.Team_Abbr) {
+                const isHomeWin = row.pts > row.opp_pts;
+                updateTeam(
+                    row.Team_Abbr, 
+                    row.pts, 
+                    row.opp_pts, 
+                    row.Before_Game_Avg_OffRtg, 
+                    row.Before_Game_Avg_DefRtg, 
+                    row.Before_Game_Avg_Pace, 
+                    isHomeWin
+                );
+            }
+
+            // 2. 處理客隊 (Opp_Abbr) - 你的 CSV 剛好有 Opp_Before_Game 欄位！
+            if (row.Opp_Abbr) {
+                const isAwayWin = row.opp_pts > row.pts; // 客隊得分 > 主隊得分
+                updateTeam(
+                    row.Opp_Abbr, 
+                    row.opp_pts, 
+                    row.pts, 
+                    row.Opp_Before_Game_Avg_OffRtg, 
+                    row.Opp_Before_Game_Avg_DefRtg, 
+                    row.Opp_Before_Game_Avg_Pace, 
+                    isAwayWin
+                );
+            }
+        });
+
+        return Object.values(teams).map(t => {
+            const info = TEAM_INFO[t.name] || { color: "#999", conf: "Unknown", div: "Unknown" };
+            // 避免除以零
+            const gp = t.gp || 1; 
+            const off = t.sumOff / gp;
+            const def = t.sumDef / gp;
+            const pace = t.sumPace / gp;
+            
+            return {
+                name: t.name,
+                winRate: (t.wins / gp * 100).toFixed(1),
+                offRtg: off.toFixed(1),
+                defRtg: def.toFixed(1),
+                netRtg: (off - def).toFixed(1),
+                pace: pace.toFixed(1),
+                color: info.color,
+                conf: info.conf,
+                div: info.div,
+                pointStyle: loadedLogos[t.name] || 'circle', 
+                _winRate: t.wins / gp,
+                _netRtg: off - def,
+                _offRtg: off,
+                _defRtg: def,
+                _pace: pace
+            };
+        });
+    }
+
+    function updateDashboard() {
+        const season = document.getElementById('seasonFilter').value;
+        const confFilter = document.getElementById('confFilter').value;
+        const divFilter = document.getElementById('divFilter').value;
+        const metric = document.getElementById('metricFilter').value;
+        
+        // 儲存原始比賽資料
+        currentSeasonGames = rawData.filter(r => r.Season_Year == season);
+        
+        // 計算統計 (現在會包含主場與客場的所有場次)
+        let stats = calculateStats(currentSeasonGames);
+        currentStats = stats;
+
+        let filteredStats = stats;
+        if (confFilter !== 'ALL') filteredStats = filteredStats.filter(t => t.conf === confFilter);
+        if (divFilter !== 'ALL') filteredStats = filteredStats.filter(t => t.div === divFilter);
+
+        const sortMap = { "winRate": "_winRate", "netRtg": "_netRtg", "offRtg": "offRtg", "pace": "offRtg" }; 
+        filteredStats.sort((a, b) => b[sortMap[metric]] - a[sortMap[metric]]);
+
+        renderScatterChart(filteredStats);
+        renderStatsTable(filteredStats);
+    }
+
+    function renderScatterChart(stats) {
+        const ctx = document.getElementById('scatterChart').getContext('2d');
+        const points = stats.map(t => ({ x: t.offRtg, y: t.defRtg, team: t.name, pointStyle: t.pointStyle }));
+
+        if (scatterChartInstance) scatterChartInstance.destroy();
+
+        scatterChartInstance = new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                labels: stats.map(t => t.name),
+                datasets: [{
+                    label: 'Team Data',
+                    data: points,
+                    pointStyle: (ctx) => ctx.raw.pointStyle, 
+                    pointRadius: 6,       
+                    pointHoverRadius: 10,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (evt, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const teamName = stats[index].name;
+                        openTeamModal(teamName);
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) { return `${ctx.raw.team}`; }
+                        },
+                        backgroundColor: 'rgba(0,0,0,0.9)',
+                        titleFont: { size: 14 }
+                    }
+                },
+                scales: {
+                    x: { title: { display: true, text: '進攻效率', color: '#aaa' }, grid: { color: '#333' } },
+                    y: { title: { display: true, text: '防守效率', color: '#aaa' }, grid: { color: '#333' }, reverse: true }
+                }
+            }
+        });
+    }
+
+    function renderStatsTable(stats) {
+        const tbody = document.querySelector("#statsTable tbody");
+        tbody.innerHTML = "";
+        stats.forEach((t, i) => {
+            const netClass = t.netRtg > 0 ? 'val-high' : 'val-low';
+            tbody.innerHTML += `<tr>
+                <td style="color:#666">${i+1}</td>
+                <td class="team-name"><span class="color-dot" style="background:${t.color}"></span>${t.name}</td>
+                <td>${t.winRate}%</td>
+                <td class="${netClass}">${t.netRtg > 0 ? '+'+t.netRtg : t.netRtg}</td>
+            </tr>`;
+        });
+    }
+
+    // ================= 戰報視窗邏輯 (修正版) =================
+
+    function openTeamModal(teamName) {
+        const teamData = currentStats.find(t => t.name === teamName);
+        if (!teamData) return;
+
+        document.getElementById('modalTitle').textContent = teamName;
+        document.getElementById('modalSeason').textContent = document.getElementById('seasonFilter').value + " Season Report";
+        document.getElementById('modalLogo').src = `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${(URL_MAP[teamName]||teamName).toLowerCase()}.png`;
+
+        document.getElementById('valOff').textContent = teamData.offRtg;
+        document.getElementById('valDef').textContent = teamData.defRtg;
+        document.getElementById('valNet').textContent = (teamData.netRtg > 0 ? '+':'') + teamData.netRtg;
+        document.getElementById('valPace').textContent = teamData.pace;
+
+        // 🔥 核心修正：主客場勝率計算 🔥
+        // 必須同時檢查 Team_Abbr (主場) 和 Opp_Abbr (客場)
+        let homeW=0, homeG=0, awayW=0, awayG=0;
+
+        currentSeasonGames.forEach(g => {
+            // Case 1: 當該隊是主隊
+            if (g.Team_Abbr === teamName) {
+                homeG++;
+                if (g.pts > g.opp_pts) homeW++;
+            }
+            // Case 2: 當該隊是客隊
+            else if (g.Opp_Abbr === teamName) {
+                awayG++;
+                if (g.opp_pts > g.pts) awayW++; // 客場勝：客隊分數 > 主隊分數
+            }
+        });
+
+        const homePct = homeG>0 ? Math.round(homeW/homeG*100) : 0;
+        const awayPct = awayG>0 ? Math.round(awayW/awayG*100) : 0;
+
+        document.getElementById('homeWinVal').textContent = `${homePct}% (${homeW}-${homeG-homeW})`;
+        document.getElementById('homeBar').style.width = homePct + "%";
+        document.getElementById('awayWinVal').textContent = `${awayPct}% (${awayW}-${awayG-awayW})`;
+        document.getElementById('awayBar').style.width = awayPct + "%";
+
+        renderRadarChart(teamData);
+        document.getElementById('teamModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('teamModal').style.display = 'none';
+    }
+
+    function renderRadarChart(teamData) {
+        const ctx = document.getElementById('radarChart').getContext('2d');
+        if (radarChartInstance) radarChartInstance.destroy();
+
+        // 聯盟平均值與極值 (用於正規化)
+        const allOff = currentStats.map(t => t._offRtg);
+        const allDef = currentStats.map(t => t._defRtg);
+        const allWin = currentStats.map(t => t._winRate);
+        const allNet = currentStats.map(t => t._netRtg);
+        const allPace = currentStats.map(t => t._pace);
+
+        const maxOff = Math.max(...allOff); const minOff = Math.min(...allOff);
+        const maxDef = Math.max(...allDef); const minDef = Math.min(...allDef); // 注意防守反轉
+        const maxWin = Math.max(...allWin); const minWin = Math.min(...allWin);
+        const avgNet = allNet.reduce((a,b)=>a+b,0)/allNet.length; // 平均淨勝分
+
+        // 0-100 正規化函式
+        const norm = (val, min, max) => {
+            if (max === min) return 50;
+            return (val - min) / (max - min) * 100;
+        };
+        // 防守反轉 (數值越低越好 -> 分數越高)
+        const normRev = (val, min, max) => {
+            if (max === min) return 50;
+            return (max - val) / (max - min) * 100;
+        };
+
+        const scoreOff = norm(teamData._offRtg, minOff, maxOff);
+        const scoreDef = normRev(teamData._defRtg, minDef, maxDef);
+        const scoreWin = norm(teamData._winRate, minWin, maxWin);
+        // NetRtg 和 Pace 比較特殊，用固定範圍或標準差會更好，這裡簡化用極值
+        const maxNet = Math.max(...allNet); const minNet = Math.min(...allNet);
+        const maxPace = Math.max(...allPace); const minPace = Math.min(...allPace);
+        
+        const scoreNet = norm(teamData._netRtg, minNet, maxNet); 
+        const scorePace = norm(teamData._pace, minPace, maxPace);
+
+        // 聯盟平均線 (永遠是 50 左右)
+        const avgLine = [50, 50, 50, 50, 50]; 
+
+        radarChartInstance = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: ['進攻', '防守', '勝率', '淨勝分', '節奏'],
+                datasets: [
+                    {
+                        label: teamData.name,
+                        data: [scoreOff, scoreDef, scoreWin, scoreNet, scorePace],
+                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                        borderColor: '#3b82f6',
+                        pointBackgroundColor: '#fff',
+                        zIndex: 2
+                    },
+                    {
+                        label: 'League Avg',
+                        data: avgLine,
+                        borderColor: '#666',
+                        borderDash: [5, 5],
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        backgroundColor: 'transparent',
+                        zIndex: 1
+                    }
+                ]
+            },
+            options: {
+                scales: {
+                    r: {
+                        angleLines: { color: '#444' },
+                        grid: { color: '#444' },
+                        pointLabels: { color: '#ccc', font: { size: 12 } },
+                        suggestedMin: 10,
+                        suggestedMax: 90,
+                        ticks: { display: false }
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    document.getElementById('teamModal').addEventListener('click', (e) => {
+        if(e.target.id === 'teamModal') closeModal();
+    });
+
+    document.getElementById('seasonFilter').addEventListener('change', updateDashboard);
+    document.getElementById('confFilter').addEventListener('change', updateDashboard);
+    document.getElementById('divFilter').addEventListener('change', updateDashboard);
+    document.getElementById('metricFilter').addEventListener('change', updateDashboard);
+
+</script>
+
+</body>
+</html>
