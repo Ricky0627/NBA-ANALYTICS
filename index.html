@@ -1,248 +1,275 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="business">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NBA 戰情室 (v25.0 基準線版)</title>
+    <title>NBA 戰情室 (DaisyUI + DataTables版)</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+
     <style>
-        :root {
-            --bg-color: #121212;
-            --card-bg: #1e1e1e;
-            --text-main: #e0e0e0;
-            --text-muted: #a0a0a0;
-            --accent: #3b82f6;
-            --success: #10b981;
-            --danger: #ef4444;
-            --warning: #f59e0b;
+        /* 圖表容器高度 */
+        .chart-wrapper {
+            position: relative;
+            height: 60vh;
+            min-height: 400px;
+            width: 100%;
         }
-        body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
-        .container { max-width: 1400px; margin: 0 auto; }
-        
-        header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #333; }
-        h1 { margin: 0; font-weight: 700; color: white; letter-spacing: 1px; }
-        .badge { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight:bold; vertical-align: middle; }
-        .data-date { font-size: 14px; color: var(--text-muted); margin-top: 5px; }
-        .data-date span { color: var(--accent); font-weight: bold; }
-
-        .controls { 
-            display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; 
-            background: #252525; padding: 15px; border-radius: 8px; border: 1px solid #333;
-        }
-        .control-group { display: flex; flex-direction: column; gap: 5px; }
-        .control-group label { font-size: 12px; color: var(--text-muted); font-weight: bold; }
-        select { background: #333; color: white; border: 1px solid #444; padding: 8px 12px; border-radius: 4px; font-size: 14px; outline: none; min-width: 140px; }
-        select:hover { border-color: var(--accent); }
-
-        .grid-dashboard { display: grid; grid-template-columns: 2fr 1fr; gap: 25px; }
-        .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 100%; box-sizing: border-box; }
-        .card h3 { margin-top: 0; color: var(--text-muted); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }
-
-        .chart-container { position: relative; height: 600px; width: 100%; }
-        .table-container { overflow-x: auto; max-height: 600px; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th { text-align: left; padding: 12px; background: #252525; color: var(--text-muted); position: sticky; top: 0; }
-        td { padding: 12px; border-bottom: 1px solid #333; vertical-align: middle; }
-        tr:hover { background: #2a2a2a; }
-        .team-name { font-weight: bold; color: white; display: flex; align-items: center; }
-        
-        .val-high { color: var(--success); }
-        .val-low { color: var(--danger); }
         .color-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; }
 
-        /* Modal */
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 1000; display: none;
-            justify-content: center; align-items: center;
+        /* --- DataTables 深色模式適配 --- */
+        /* 讓 DataTables 的文字顏色適應 DaisyUI 主題 */
+        .dataTables_wrapper .dataTables_length, 
+        .dataTables_wrapper .dataTables_filter, 
+        .dataTables_wrapper .dataTables_info, 
+        .dataTables_wrapper .dataTables_processing, 
+        .dataTables_wrapper .dataTables_paginate {
+            color: hsl(var(--bc) / 0.6) !important;
+            margin-bottom: 10px;
         }
-        .modal-content {
-            background: #252525; width: 90%; max-width: 800px; border-radius: 12px; padding: 30px;
-            position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
-        }
-        .close-btn {
-            position: absolute; top: 15px; right: 20px; font-size: 24px; color: #888; cursor: pointer; z-index: 10;
-        }
-        .close-btn:hover { color: white; }
         
-        .team-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #444; padding-bottom: 15px; }
-        .team-logo-lg { width: 80px; height: 80px; background: white; border-radius: 50%; padding: 5px; }
+        /* 搜尋框與下拉選單樣式 */
+        .dataTables_wrapper input, .dataTables_wrapper select {
+            background-color: hsl(var(--b1));
+            border: 1px solid hsl(var(--bc) / 0.2);
+            border-radius: 0.5rem;
+            padding: 4px 8px;
+            color: hsl(var(--bc));
+        }
+
+        /* 表格標頭樣式 */
+        table.dataTable thead th, table.dataTable thead td {
+            border-bottom: 1px solid hsl(var(--bc) / 0.2) !important;
+            color: hsl(var(--bc) / 0.8);
+        }
         
-        .modal-controls { display: flex; gap: 10px; margin-top: 5px; }
-        .modal-select { background: #444; border: 1px solid #555; padding: 5px 10px; color: white; border-radius: 4px; font-size: 16px; font-weight: bold; }
+        /* 表格內容列樣式 */
+        table.dataTable tbody tr {
+            background-color: hsl(var(--b2)) !important; /* 對應 DaisyUI base-200 */
+            color: hsl(var(--bc));
+        }
+        table.dataTable tbody tr:hover {
+            background-color: hsl(var(--b3)) !important; /* 對應 DaisyUI hover */
+        }
+        table.dataTable.no-footer {
+            border-bottom: 1px solid hsl(var(--bc) / 0.2) !important;
+        }
 
-        .stat-box { background: #333; padding: 15px; border-radius: 8px; text-align: center; }
-        .stat-val { font-size: 20px; font-weight: bold; color: white; }
-        .stat-label { font-size: 12px; color: #aaa; margin-top: 5px; }
-        .split-bar { height: 8px; background: #444; border-radius: 4px; overflow: hidden; margin-top: 5px; }
-        .split-fill { height: 100%; background: var(--accent); }
-
-        #loader { text-align: center; margin-top: 50px; color: var(--accent); }
-        @media (max-width: 1024px) { 
-            .grid-dashboard { grid-template-columns: 1fr; } 
-            .modal-content { grid-template-columns: 1fr; max-height: 90vh; overflow-y: auto; }
+        /* 分頁按鈕樣式 */
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+            background: hsl(var(--p)) !important; /* Primary color */
+            color: hsl(var(--pc)) !important;
+            border: none !important;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+            background: hsl(var(--pf)) !important;
+            border: none !important;
+            color: white !important;
         }
     </style>
 </head>
-<body>
+<body class="p-4 lg:p-8 min-h-screen">
 
-<div class="container">
-    <header>
-        <div>
-            <h1>NBA ANALYTICS <span class="badge">V25.0</span></h1>
-            <p style="color:var(--text-muted); margin:5px 0 0;">With 1:1 Reference Line 
-
-[Image of chart with reference line]
-</p>
+<div class="container mx-auto max-w-7xl">
+    
+    <header class="navbar bg-base-200 rounded-box shadow-lg mb-6 flex flex-col md:flex-row justify-between items-center p-4">
+        <div class="flex flex-col md:flex-row items-center gap-2">
+            <h1 class="text-2xl font-bold tracking-wider">NBA ANALYTICS</h1>
+            <span class="badge badge-primary font-bold">V25.0</span>
+            <span class="badge badge-ghost text-xs">DataTables版</span>
         </div>
-        <div style="text-align: right;">
-            <div id="status" style="font-size:14px; color:var(--success);">● Live Data</div>
-            <div id="last-update" class="data-date">數據統計截至: <span>讀取中...</span></div>
+        <div class="text-right mt-2 md:mt-0">
+            <div class="flex items-center gap-2 justify-end">
+                <span id="status" class="badge badge-success badge-xs gap-1">Live</span>
+            </div>
+            <div id="last-update" class="text-xs text-base-content/50 mt-1">數據統計截至: <span class="text-accent font-bold">讀取中...</span></div>
         </div>
     </header>
 
-    <div id="loader"><h2>⟳ 正在連線資料庫...</h2></div>
-
-    <div id="main-content" style="display:none;">
-        <div class="controls">
-            <div class="control-group">
-                <label>📅 賽季 (Season)</label>
-                <select id="seasonFilter"><option value="ALL">載入中...</option></select>
-            </div>
-            
-            <div class="control-group">
-                <label>📈 圖表模式 (Chart Mode)</label>
-                <select id="chartMode">
-                    <option value="efficiency">🏀 攻守效率 (Off vs Def)</option>
-                    <option value="homeAway">🏠 主客戰績 (Home vs Away)</option>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label>🌎 分區 (Conference)</label>
-                <select id="confFilter">
-                    <option value="ALL">全部 (All)</option>
-                    <option value="East">東區 (Eastern)</option>
-                    <option value="West">西區 (Western)</option>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label>🚩 分組 (Division)</label>
-                <select id="divFilter">
-                    <option value="ALL">全部 (All)</option>
-                    <optgroup label="東區 (East)">
-                        <option value="Atlantic">大西洋組 (Atlantic)</option>
-                        <option value="Central">中央組 (Central)</option>
-                        <option value="Southeast">東南組 (Southeast)</option>
-                    </optgroup>
-                    <optgroup label="西區 (West)">
-                        <option value="Northwest">西北組 (Northwest)</option>
-                        <option value="Pacific">太平洋組 (Pacific)</option>
-                        <option value="Southwest">西南組 (Southwest)</option>
-                    </optgroup>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label>📊 排序依據 (Sort By)</label>
-                <select id="metricFilter">
-                    <option value="winRate">總勝率 (Overall Win%)</option>
-                    <option value="homeWinRate">主場勝率 (Home Win%)</option>
-                    <option value="awayWinRate">客場勝率 (Away Win%)</option>
-                    <option value="netRtg">淨效率值 (Net Rtg)</option>
-                    <option value="offRtg">進攻效率 (Off Rtg)</option>
-                    <option value="pace">比賽節奏 (Pace)</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="grid-dashboard">
-            <div class="card">
-                <h3 id="chartTitle">Efficiency Landscape</h3>
-                <p id="chartDesc" style="font-size:12px; color:#888; margin-top:-10px;">X軸: 進攻效率 | Y軸: 防守效率 | 虛線為平衡線 (y=x)</p>
-                <div class="chart-container">
-                    <canvas id="scatterChart"></canvas>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Team Rankings</h3>
-                <div class="table-container">
-                    <table id="statsTable">
-                        <thead>
-                            <tr><th>RK</th><th>TEAM</th><th id="th-winrate">W%</th><th>NET RTG</th></tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+    <div id="loader" class="flex flex-col justify-center items-center h-64 gap-4">
+        <span class="loading loading-spinner loading-lg text-primary"></span>
+        <h2 class="text-xl font-bold animate-pulse">正在連線資料庫...</h2>
     </div>
-</div>
 
-<div class="modal-overlay" id="teamModal">
-    <div class="modal-content">
-        <span class="close-btn" id="closeBtn">×</span>
+    <div id="main-content" class="hidden animate-fade-in-up">
         
-        <div class="team-header">
-            <img id="modalLogo" class="team-logo-lg" src="" alt="Team Logo">
-            <div>
-                <div class="modal-controls">
-                    <select id="modalTeamSelect" class="modal-select"></select>
-                    <select id="modalSeasonSelect" class="modal-select"></select>
-                </div>
-                <p style="margin:5px 0 0; color:#888; font-size:13px;">Team Performance Report</p>
-            </div>
-        </div>
-
-        <div>
-            <h3 style="color:#aaa; border-bottom:1px solid #444; padding-bottom:5px;">📊 戰力雷達 (Vs League)</h3>
-            <div style="position: relative; height:300px; width:100%;">
-                <canvas id="radarChart"></canvas>
-            </div>
-            <p style="font-size:12px; color:#666; text-align:center;">*防守數值反轉：越外圈代表失分越少(防守越好)</p>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:20px;">
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                <div class="stat-box">
-                    <div class="stat-val" id="valOff">--</div>
-                    <div class="stat-label">進攻 (Off Rtg)</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-val" id="valDef">--</div>
-                    <div class="stat-label">防守 (Def Rtg)</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-val" id="valNet">--</div>
-                    <div class="stat-label">淨勝 (Net Rtg)</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-val" id="valPace">--</div>
-                    <div class="stat-label">節奏 (Pace)</div>
-                </div>
-            </div>
-
-            <div class="stat-box" style="text-align:left;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <span style="color:#aaa; font-size:12px;">主場勝率 (Home)</span>
-                    <span id="homeWinVal" style="color:white; font-weight:bold;">--%</span>
-                </div>
-                <div class="split-bar"><div id="homeBar" class="split-fill" style="width:0%"></div></div>
+        <div class="bg-base-200 p-4 rounded-xl shadow-md mb-6 border border-base-300">
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 
-                <div style="display:flex; justify-content:space-between; margin-top:15px; margin-bottom:5px;">
-                    <span style="color:#aaa; font-size:12px;">客場勝率 (Away)</span>
-                    <span id="awayWinVal" style="color:white; font-weight:bold;">--%</span>
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text font-bold">📅 賽季</span></label>
+                    <select id="seasonFilter" class="select select-bordered select-sm w-full">
+                        <option value="ALL">載入中...</option>
+                    </select>
                 </div>
-                <div class="split-bar"><div id="awayBar" class="split-fill" style="width:0%; background:#ef4444;"></div></div>
+
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text font-bold">📈 圖表模式</span></label>
+                    <select id="chartMode" class="select select-bordered select-sm w-full">
+                        <option value="efficiency">🏀 攻守效率</option>
+                        <option value="homeAway">🏠 主客戰績</option>
+                    </select>
+                </div>
+
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text font-bold">🌎 分區</span></label>
+                    <select id="confFilter" class="select select-bordered select-sm w-full">
+                        <option value="ALL">全部 (All)</option>
+                        <option value="East">東區 (Eastern)</option>
+                        <option value="West">西區 (Western)</option>
+                    </select>
+                </div>
+
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text font-bold">🚩 分組</span></label>
+                    <select id="divFilter" class="select select-bordered select-sm w-full">
+                        <option value="ALL">全部 (All)</option>
+                        <optgroup label="東區 (East)">
+                            <option value="Atlantic">大西洋組</option>
+                            <option value="Central">中央組</option>
+                            <option value="Southeast">東南組</option>
+                        </optgroup>
+                        <optgroup label="西區 (West)">
+                            <option value="Northwest">西北組</option>
+                            <option value="Pacific">太平洋組</option>
+                            <option value="Southwest">西南組</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="form-control w-full">
+                    <label class="label"><span class="label-text font-bold">📊 圖表排序</span></label>
+                    <select id="metricFilter" class="select select-bordered select-sm w-full">
+                        <option value="winRate">總勝率</option>
+                        <option value="homeWinRate">主場勝率</option>
+                        <option value="awayWinRate">客場勝率</option>
+                        <option value="netRtg">淨效率值</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="card bg-base-200 shadow-xl col-span-1 lg:col-span-2 border border-base-300">
+                <div class="card-body p-4">
+                    <h2 class="card-title text-sm uppercase tracking-widest text-base-content/70" id="chartTitle">Efficiency Landscape</h2>
+                    <p id="chartDesc" class="text-xs text-base-content/50 -mt-2 mb-2">X軸: 進攻效率 | Y軸: 防守效率</p>
+                    <div class="chart-wrapper">
+                        <canvas id="scatterChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-base-200 shadow-xl h-full border border-base-300">
+                <div class="card-body p-4">
+                    <h3 class="font-bold text-base-content/70 uppercase tracking-widest mb-4">Team Rankings</h3>
+                    
+                    <div class="overflow-x-auto">
+                        <table id="statsTable" class="row-border hover" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>RK</th>
+                                    <th>TEAM</th>
+                                    <th>W%</th>
+                                    <th>NET</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                </tbody>
+                        </table>
+                    </div>
+                    
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<dialog id="team_modal_element" class="modal">
+    <div class="modal-box w-11/12 max-w-4xl bg-base-100 border border-base-300 shadow-2xl">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" id="modalCloseBtn">✕</button>
+        </form>
+        
+        <div class="flex flex-col sm:flex-row items-center gap-6 border-b border-base-300 pb-4 mb-4">
+            <div class="avatar p-2 bg-white rounded-full">
+                <div class="w-20 rounded-full">
+                    <img id="modalLogo" src="" alt="Team Logo" />
+                </div>
+            </div>
+            <div class="flex-1 text-center sm:text-left">
+                <div class="flex gap-2 justify-center sm:justify-start mb-2">
+                    <select id="modalTeamSelect" class="select select-bordered select-sm select-ghost"></select>
+                    <select id="modalSeasonSelect" class="select select-bordered select-sm select-ghost"></select>
+                </div>
+                <h3 class="text-lg font-bold text-base-content/60">Team Performance Report</h3>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div>
+                <h3 class="divider divider-start text-xs text-base-content/50">戰力雷達 (Vs League)</h3>
+                <div class="relative h-64 w-full">
+                    <canvas id="radarChart"></canvas>
+                </div>
+            </div>
+            <div class="flex flex-col gap-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="stats shadow bg-base-200">
+                        <div class="stat place-items-center p-2">
+                            <div class="stat-title text-xs">進攻 (Off)</div>
+                            <div class="stat-value text-xl text-primary" id="valOff">--</div>
+                        </div>
+                    </div>
+                    <div class="stats shadow bg-base-200">
+                        <div class="stat place-items-center p-2">
+                            <div class="stat-title text-xs">防守 (Def)</div>
+                            <div class="stat-value text-xl text-secondary" id="valDef">--</div>
+                        </div>
+                    </div>
+                    <div class="stats shadow bg-base-200">
+                        <div class="stat place-items-center p-2">
+                            <div class="stat-title text-xs">淨勝 (Net)</div>
+                            <div class="stat-value text-xl text-accent" id="valNet">--</div>
+                        </div>
+                    </div>
+                    <div class="stats shadow bg-base-200">
+                        <div class="stat place-items-center p-2">
+                            <div class="stat-title text-xs">節奏 (Pace)</div>
+                            <div class="stat-value text-xl" id="valPace">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-base-200 p-4 rounded-xl shadow mt-2">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span>🏠 主場勝率</span>
+                        <span id="homeWinVal" class="font-bold">--%</span>
+                    </div>
+                    <progress id="homeBar" class="progress progress-success w-full" value="0" max="100"></progress>
+                    
+                    <div class="flex justify-between text-xs mt-4 mb-1">
+                        <span>✈️ 客場勝率</span>
+                        <span id="awayWinVal" class="font-bold">--%</span>
+                    </div>
+                    <progress id="awayBar" class="progress progress-error w-full" value="0" max="100"></progress>
+                </div>
+            </div>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button id="modalBackdropBtn">close</button>
+    </form>
+</dialog>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -296,6 +323,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSeasonGames = [];
     const loadedLogos = {}; 
 
+    // DataTables 實例
+    let dataTableInstance = null;
+
     const safeFloat = (v) => {
         const f = parseFloat(v);
         return isNaN(f) ? 0 : f;
@@ -323,20 +353,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     bind('divFilter', 'change', updateDashboard);
                     bind('metricFilter', 'change', updateDashboard);
                     bind('chartMode', 'change', updateDashboard);
-                    
-                    bind('teamModal', 'click', (e) => { if(e.target.id === 'teamModal') closeModal(); });
-                    bind('closeBtn', 'click', closeModal);
+                    bind('modalCloseBtn', 'click', closeModal);
+                    bind('modalBackdropBtn', 'click', closeModal);
                     bind('modalTeamSelect', 'change', updateModalContent);
                     bind('modalSeasonSelect', 'change', updateModalContent);
 
                     updateDashboard(); 
                     document.getElementById('loader').style.display = 'none';
-                    document.getElementById('main-content').style.display = 'block';
+                    document.getElementById('main-content').classList.remove('hidden');
                 });
             }
         });
     };
 
+    // ... (preloadAndResizeLogos, updateLastDate, initSeasons, initModalControls, calculateStats 保持不變) ...
     function preloadAndResizeLogos() {
         const promises = Object.keys(TEAM_INFO).map(teamAbbr => {
             return new Promise((resolve, reject) => {
@@ -375,7 +405,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function initSeasons() {
         const years = new Set(rawData.map(r => r.Season_Year).filter(y => y));
         const sorted = Array.from(years).sort().reverse();
-        
         const mainSelect = document.getElementById('seasonFilter');
         mainSelect.innerHTML = "";
         sorted.forEach(y => {
@@ -408,51 +437,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function calculateStats(data) {
-        const teams = {};
-        
-        const updateTeam = (name, offRtg, defRtg, pace) => {
-            if (!teams[name]) teams[name] = { 
-                name: name, gp: 0, wins: 0, 
-                homeG: 0, homeW: 0, awayG: 0, awayW: 0,
-                off: 0, def: 0, pace: 0 
-            };
-            teams[name].gp++;
-            
-            if(offRtg) teams[name].off = safeFloat(offRtg);
-            if(defRtg) teams[name].def = safeFloat(defRtg);
-            if(pace) teams[name].pace = safeFloat(pace);
+        const teams2 = {};
+         const updateTeam2 = (name, offRtg, defRtg, pace) => {
+            if (!teams2[name]) teams2[name] = { name: name, gp: 0, wins: 0, homeG: 0, homeW: 0, awayG: 0, awayW: 0, off: 0, def: 0, pace: 0 };
+            teams2[name].gp++;
+            if(offRtg) teams2[name].off = safeFloat(offRtg);
+            if(defRtg) teams2[name].def = safeFloat(defRtg);
+            if(pace) teams2[name].pace = safeFloat(pace);
         };
 
         data.forEach(row => {
-            if (row.Team_Abbr) {
-                updateTeam(row.Team_Abbr, row.Before_Game_Avg_OffRtg, row.Before_Game_Avg_DefRtg, row.Before_Game_Avg_Pace);
-                const t = teams[row.Team_Abbr];
+             if (row.Team_Abbr) {
+                updateTeam2(row.Team_Abbr, row.Before_Game_Avg_OffRtg, row.Before_Game_Avg_DefRtg, row.Before_Game_Avg_Pace);
+                const t = teams2[row.Team_Abbr];
                 t.homeG++;
-                if (row.pts > row.opp_pts) {
-                    t.wins++;
-                    t.homeW++;
-                }
+                if (row.pts > row.opp_pts) { t.wins++; t.homeW++; }
             }
             if (row.Opp_Abbr) {
-                updateTeam(row.Opp_Abbr, row.Opp_Before_Game_Avg_OffRtg, row.Opp_Before_Game_Avg_DefRtg, row.Opp_Before_Game_Avg_Pace);
-                const t = teams[row.Opp_Abbr];
+                updateTeam2(row.Opp_Abbr, row.Opp_Before_Game_Avg_OffRtg, row.Opp_Before_Game_Avg_DefRtg, row.Opp_Before_Game_Avg_Pace);
+                const t = teams2[row.Opp_Abbr];
                 t.awayG++;
-                if (row.opp_pts > row.pts) {
-                    t.wins++;
-                    t.awayW++;
-                }
+                if (row.opp_pts > row.pts) { t.wins++; t.awayW++; }
             }
         });
 
-        return Object.values(teams).map(t => {
+        return Object.values(teams2).map(t => {
             const info = TEAM_INFO[t.name] || { color: "#999", conf: "Unknown", div: "Unknown" };
             const gp = t.gp || 1;
             const homeG = t.homeG || 1;
             const awayG = t.awayG || 1;
-
             const homeWinRate = (t.homeW / homeG * 100);
             const awayWinRate = (t.awayW / awayG * 100);
-
             return {
                 name: t.name,
                 winRate: (t.wins/gp*100).toFixed(1),
@@ -466,7 +481,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 conf: info.conf,
                 div: info.div,
                 pointStyle: loadedLogos[t.name] || 'circle', 
-                
                 _winRate: t.wins/gp,
                 _homeWinRate: t.homeG > 0 ? t.homeW/t.homeG : 0,
                 _awayWinRate: t.awayG > 0 ? t.awayW/t.awayG : 0,
@@ -493,19 +507,103 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confFilter !== 'ALL') filteredStats = filteredStats.filter(t => t.conf === confFilter);
         if (divFilter !== 'ALL') filteredStats = filteredStats.filter(t => t.div === divFilter);
 
+        // 圖表排序
         let sortKey = "_winRate";
         if (metric === 'homeWinRate') sortKey = "_homeWinRate";
         if (metric === 'awayWinRate') sortKey = "_awayWinRate";
         if (metric === 'netRtg') sortKey = "_netRtg";
-        if (metric === 'offRtg') sortKey = "_offRtg";
-        if (metric === 'pace') sortKey = "_pace";
-
         filteredStats.sort((a, b) => b[sortKey] - a[sortKey]);
 
         renderScatterChart(filteredStats, chartMode);
         renderStatsTable(filteredStats, metric);
     }
 
+    // --- 修改：使用 DataTables 渲染表格 ---
+    function renderStatsTable(stats, currentMetric) {
+        // 準備 DataTables 需要的數據格式
+        // 每一列是一個物件，包含我們需要顯示的屬性
+        const tableData = stats.map((t, index) => {
+            let displayWinRate = t.winRate;
+            if (currentMetric === 'homeWinRate') displayWinRate = t.homeWinRate;
+            if (currentMetric === 'awayWinRate') displayWinRate = t.awayWinRate;
+            
+            return {
+                rank: index + 1,
+                teamObj: t, // 儲存整個物件以便 render 函數使用
+                winRate: displayWinRate,
+                netRtg: t.netRtg
+            };
+        });
+
+        // 如果 DataTables 已經存在，先銷毀它以便重新初始化 (處理欄位變更或資料更新)
+        // 注意：destroy: true 雖然方便，但大量數據時可能有效能問題。這裡數據量小，沒問題。
+        if ($.fn.DataTable.isDataTable('#statsTable')) {
+            $('#statsTable').DataTable().destroy();
+        }
+
+        // 初始化 DataTables
+        dataTableInstance = $('#statsTable').DataTable({
+            data: tableData,
+            destroy: true, // 允許重新初始化
+            pageLength: 10, // 每頁顯示幾筆
+            lengthChange: false, // 隱藏 "顯示 X 筆" 的下拉選單 (保持介面簡潔)
+            searching: true, // 開啟搜尋
+            ordering: true,  // 開啟排序
+            info: true,      // 顯示 "Showing 1 to 10 of..."
+            columns: [
+                { data: 'rank', width: "10%" },
+                { 
+                    data: 'teamObj', 
+                    title: "TEAM",
+                    render: function(data, type, row) {
+                        // 自定義渲染：加入顏色點點
+                        if (type === 'display') {
+                            return `<div class="flex items-center gap-2"><span class="color-dot" style="background:${data.color}"></span>${data.name}</div>`;
+                        }
+                        return data.name; // 用於排序和搜尋時只回傳隊名
+                    }
+                },
+                { 
+                    data: 'winRate', 
+                    title: "W%",
+                    render: function(data, type) {
+                        return type === 'display' ? `<span class="font-bold">${data}%</span>` : data;
+                    }
+                },
+                { 
+                    data: 'netRtg', 
+                    title: "NET",
+                    render: function(data, type) {
+                        if (type === 'display') {
+                            const num = parseFloat(data);
+                            const colorClass = num > 0 ? 'text-success font-bold' : 'text-error font-bold';
+                            return `<span class="${colorClass}">${num > 0 ? '+' + data : data}</span>`;
+                        }
+                        return data;
+                    }
+                }
+            ],
+            // 點擊行事件：DataTables 特有寫法
+            createdRow: function(row, data, dataIndex) {
+                $(row).on('click', () => {
+                   openTeamModal(data.teamObj.name);
+                });
+                $(row).css('cursor', 'pointer');
+            },
+            // 語言設定 (選用)
+            language: {
+                search: "搜尋球隊:",
+                paginate: {
+                    next: "下一頁",
+                    previous: "上一頁"
+                },
+                info: "顯示 _START_ 到 _END_ 筆 (共 _TOTAL_ 隊)",
+                emptyTable: "無符合資料"
+            }
+        });
+    }
+
+    // ... (renderScatterChart, openTeamModal, closeModal, updateModalContent, renderRadarChart 保持不變) ...
     function renderScatterChart(stats, mode) {
         const ctx = document.getElementById('scatterChart').getContext('2d');
         if (scatterChartInstance) scatterChartInstance.destroy();
@@ -513,35 +611,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const chartTitle = document.getElementById('chartTitle');
         const chartDesc = document.getElementById('chartDesc');
         let points = [], xLabel, yLabel, revY = false;
-        
-        // 🔥 動態基準線計算
         let lineStart, lineEnd;
 
         if (mode === 'homeAway') {
-            chartTitle.textContent = "Home vs Away Performance (主客場戰績)";
+            chartTitle.textContent = "Home vs Away Performance";
             chartDesc.textContent = "X軸: 主場勝率 | Y軸: 客場勝率 | 虛線上方為客場更強";
             xLabel = "Home Win% (主場勝率)"; 
             yLabel = "Away Win% (客場勝率)";
-            
             points = stats.map(t => ({ x: t._homeWinRate * 100, y: t._awayWinRate * 100, team: t.name, pointStyle: t.pointStyle }));
             lineStart = {x: 0, y: 0}; lineEnd = {x: 100, y: 100};
         } else {
-            chartTitle.textContent = "Efficiency Landscape (攻守效率)";
+            chartTitle.textContent = "Efficiency Landscape";
             chartDesc.textContent = "X軸: 進攻效率 | Y軸: 防守效率 | 虛線右上方為強權 (淨勝分 > 0)";
             xLabel = "Off Rtg (進攻)"; 
             yLabel = "Def Rtg (防守)"; 
             revY = true;
-
             points = stats.map(t => ({ x: t._offRtg, y: t._defRtg, team: t.name, pointStyle: t.pointStyle }));
-            
-            // 自動計算範圍
             const allVals = points.map(p => p.x).concat(points.map(p => p.y));
             const minVal = Math.floor(Math.min(...allVals) - 2);
             const maxVal = Math.ceil(Math.max(...allVals) + 2);
             lineStart = {x: minVal, y: minVal}; lineEnd = {x: maxVal, y: maxVal};
         }
 
-        // 🔥 新增基準線 Dataset
         const referenceLine = {
             label: '1:1 Reference',
             data: [lineStart, lineEnd],
@@ -553,6 +644,9 @@ document.addEventListener('DOMContentLoaded', () => {
             fill: false,
             zIndex: 0
         };
+
+        Chart.defaults.color = '#a6adbb'; 
+        Chart.defaults.borderColor = '#333';
 
         scatterChartInstance = new Chart(ctx, {
             type: 'scatter',
@@ -605,44 +699,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderStatsTable(stats, currentMetric) {
-        const tbody = document.querySelector("#statsTable tbody");
-        const thWinRate = document.getElementById('th-winrate');
-        
-        if (currentMetric === 'homeWinRate') {
-            thWinRate.textContent = "HOME W%";
-            thWinRate.style.color = "var(--success)";
-        } else if (currentMetric === 'awayWinRate') {
-            thWinRate.textContent = "AWAY W%";
-            thWinRate.style.color = "var(--danger)";
-        } else {
-            thWinRate.textContent = "W%";
-            thWinRate.style.color = "var(--text-muted)";
-        }
-
-        tbody.innerHTML = "";
-        stats.forEach((t, i) => {
-            const netClass = t.netRtg > 0 ? 'val-high' : 'val-low';
-            
-            let displayWinRate = t.winRate;
-            if (currentMetric === 'homeWinRate') displayWinRate = t.homeWinRate;
-            if (currentMetric === 'awayWinRate') displayWinRate = t.awayWinRate;
-
-            tbody.innerHTML += `<tr>
-                <td style="color:#666">${i+1}</td>
-                <td class="team-name"><span class="color-dot" style="background:${t.color}"></span>${t.name}</td>
-                <td style="font-weight:bold">${displayWinRate}%</td>
-                <td class="${netClass}">${t.netRtg > 0 ? '+'+t.netRtg : t.netRtg}</td>
-            </tr>`;
-        });
-    }
-
     function openTeamModal(teamName) {
         const currentSeason = document.getElementById('seasonFilter').value;
         document.getElementById('modalTeamSelect').value = teamName;
         document.getElementById('modalSeasonSelect').value = currentSeason;
-        document.getElementById('teamModal').style.display = 'flex';
+        const modal = document.getElementById('team_modal_element');
+        modal.classList.add('modal-open');
         updateModalContent();
+    }
+
+    function closeModal() {
+        const modal = document.getElementById('team_modal_element');
+        modal.classList.remove('modal-open');
     }
 
     function updateModalContent() {
@@ -676,15 +744,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.getElementById('homeWinVal').textContent = `${homePct}% (${homeW}-${homeG-homeW})`;
-        document.getElementById('homeBar').style.width = homePct + "%";
+        document.getElementById('homeBar').value = homePct;
         document.getElementById('awayWinVal').textContent = `${awayPct}% (${awayW}-${awayG-awayW})`;
-        document.getElementById('awayBar').style.width = awayPct + "%";
+        document.getElementById('awayBar').value = awayPct;
 
         renderRadarChart(teamData, seasonStats);
-    }
-
-    function closeModal() {
-        document.getElementById('teamModal').style.display = 'none';
     }
 
     function renderRadarChart(teamData, allStats) {
@@ -762,16 +826,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    document.getElementById('teamModal').addEventListener('click', (e) => {
-        if(e.target.id === 'teamModal') closeModal();
-    });
-
-    document.getElementById('seasonFilter').addEventListener('change', updateDashboard);
-    document.getElementById('confFilter').addEventListener('change', updateDashboard);
-    document.getElementById('divFilter').addEventListener('change', updateDashboard);
-    document.getElementById('metricFilter').addEventListener('change', updateDashboard);
-    document.getElementById('chartMode').addEventListener('change', updateDashboard);
 
 });
 </script>
