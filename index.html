@@ -3,13 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NBA 戰情室 (DaisyUI + DataTables版)</title>
+    <title>NBA 戰情室 (SPA版)</title>
     
     <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.tailwindcss.com"></script>
-
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
-
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
@@ -17,296 +15,291 @@
 
     <style>
         /* 圖表容器高度 */
-        .chart-wrapper {
-            position: relative;
-            height: 60vh;
-            min-height: 400px;
-            width: 100%;
-        }
+        .chart-wrapper { position: relative; height: 60vh; min-height: 400px; width: 100%; }
         .color-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; }
+        
+        /* 動畫效果 */
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         /* --- DataTables 深色模式適配 --- */
-        /* 讓 DataTables 的文字顏色適應 DaisyUI 主題 */
         .dataTables_wrapper .dataTables_length, 
         .dataTables_wrapper .dataTables_filter, 
         .dataTables_wrapper .dataTables_info, 
         .dataTables_wrapper .dataTables_processing, 
-        .dataTables_wrapper .dataTables_paginate {
-            color: hsl(var(--bc) / 0.6) !important;
-            margin-bottom: 10px;
-        }
+        .dataTables_wrapper .dataTables_paginate { color: hsl(var(--bc) / 0.6) !important; margin-bottom: 10px; }
         
-        /* 搜尋框與下拉選單樣式 */
         .dataTables_wrapper input, .dataTables_wrapper select {
-            background-color: hsl(var(--b1));
-            border: 1px solid hsl(var(--bc) / 0.2);
-            border-radius: 0.5rem;
-            padding: 4px 8px;
-            color: hsl(var(--bc));
+            background-color: hsl(var(--b1)); border: 1px solid hsl(var(--bc) / 0.2);
+            border-radius: 0.5rem; padding: 4px 8px; color: hsl(var(--bc));
         }
-
-        /* 表格標頭樣式 */
-        table.dataTable thead th, table.dataTable thead td {
-            border-bottom: 1px solid hsl(var(--bc) / 0.2) !important;
-            color: hsl(var(--bc) / 0.8);
-        }
-        
-        /* 表格內容列樣式 */
-        table.dataTable tbody tr {
-            background-color: hsl(var(--b2)) !important; /* 對應 DaisyUI base-200 */
-            color: hsl(var(--bc));
-        }
-        table.dataTable tbody tr:hover {
-            background-color: hsl(var(--b3)) !important; /* 對應 DaisyUI hover */
-        }
-        table.dataTable.no-footer {
-            border-bottom: 1px solid hsl(var(--bc) / 0.2) !important;
-        }
-
-        /* 分頁按鈕樣式 */
-        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
-            background: hsl(var(--p)) !important; /* Primary color */
-            color: hsl(var(--pc)) !important;
-            border: none !important;
-        }
-        .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
-            background: hsl(var(--pf)) !important;
-            border: none !important;
-            color: white !important;
-        }
+        table.dataTable thead th, table.dataTable thead td { border-bottom: 1px solid hsl(var(--bc) / 0.2) !important; color: hsl(var(--bc) / 0.8); }
+        table.dataTable tbody tr { background-color: hsl(var(--b2)) !important; color: hsl(var(--bc)); }
+        table.dataTable tbody tr:hover { background-color: hsl(var(--b3)) !important; }
+        table.dataTable.no-footer { border-bottom: 1px solid hsl(var(--bc) / 0.2) !important; }
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current { background: hsl(var(--p)) !important; color: hsl(var(--pc)) !important; border: none !important; }
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover { background: hsl(var(--pf)) !important; border: none !important; color: white !important; }
     </style>
 </head>
-<body class="p-4 lg:p-8 min-h-screen">
+<body class="min-h-screen bg-base-100 font-sans">
 
-<div class="container mx-auto max-w-7xl">
-    
-    <header class="navbar bg-base-200 rounded-box shadow-lg mb-6 flex flex-col md:flex-row justify-between items-center p-4">
-        <div class="flex flex-col md:flex-row items-center gap-2">
-            <h1 class="text-2xl font-bold tracking-wider">NBA ANALYTICS</h1>
-            <span class="badge badge-primary font-bold">V25.0</span>
-            <span class="badge badge-ghost text-xs">DataTables版</span>
+    <header class="navbar bg-base-200 border-b border-base-300 sticky top-0 z-50 px-4 lg:px-8 shadow-sm">
+        <div class="flex-1">
+            <a onclick="showDashboard()" class="btn btn-ghost text-xl font-bold tracking-wider cursor-pointer">
+                🏀 NBA ANALYTICS
+            </a>
+            <span class="badge badge-primary font-bold ml-2 hidden sm:inline-flex">V25.0</span>
         </div>
-        <div class="text-right mt-2 md:mt-0">
-            <div class="flex items-center gap-2 justify-end">
-                <span id="status" class="badge badge-success badge-xs gap-1">Live</span>
-            </div>
-            <div id="last-update" class="text-xs text-base-content/50 mt-1">數據統計截至: <span class="text-accent font-bold">讀取中...</span></div>
+        <div class="flex-none gap-4">
+            <div id="last-update" class="text-xs text-base-content/50 hidden sm:block">數據統計截至: <span class="text-accent font-bold">讀取中...</span></div>
+            <div id="status" class="badge badge-success badge-xs gap-1 animate-pulse">Live</div>
         </div>
     </header>
 
-    <div id="loader" class="flex flex-col justify-center items-center h-64 gap-4">
+    <div id="loader" class="flex flex-col justify-center items-center h-[80vh] gap-4">
         <span class="loading loading-spinner loading-lg text-primary"></span>
-        <h2 class="text-xl font-bold animate-pulse">正在連線資料庫...</h2>
+        <h2 class="text-xl font-bold animate-pulse text-base-content/70">正在分析聯盟數據...</h2>
     </div>
 
-    <div id="main-content" class="hidden animate-fade-in-up">
+    <main class="container mx-auto max-w-7xl p-4 lg:p-6">
         
-        <div class="bg-base-200 p-4 rounded-xl shadow-md mb-6 border border-base-300">
-            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text font-bold">📅 賽季</span></label>
-                    <select id="seasonFilter" class="select select-bordered select-sm w-full">
-                        <option value="ALL">載入中...</option>
-                    </select>
-                </div>
-
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text font-bold">📈 圖表模式</span></label>
-                    <select id="chartMode" class="select select-bordered select-sm w-full">
-                        <option value="efficiency">🏀 攻守效率</option>
-                        <option value="homeAway">🏠 主客戰績</option>
-                    </select>
-                </div>
-
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text font-bold">🌎 分區</span></label>
-                    <select id="confFilter" class="select select-bordered select-sm w-full">
-                        <option value="ALL">全部 (All)</option>
-                        <option value="East">東區 (Eastern)</option>
-                        <option value="West">西區 (Western)</option>
-                    </select>
-                </div>
-
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text font-bold">🚩 分組</span></label>
-                    <select id="divFilter" class="select select-bordered select-sm w-full">
-                        <option value="ALL">全部 (All)</option>
-                        <optgroup label="東區 (East)">
-                            <option value="Atlantic">大西洋組</option>
-                            <option value="Central">中央組</option>
-                            <option value="Southeast">東南組</option>
-                        </optgroup>
-                        <optgroup label="西區 (West)">
-                            <option value="Northwest">西北組</option>
-                            <option value="Pacific">太平洋組</option>
-                            <option value="Southwest">西南組</option>
-                        </optgroup>
-                    </select>
-                </div>
-
-                <div class="form-control w-full">
-                    <label class="label"><span class="label-text font-bold">📊 圖表排序</span></label>
-                    <select id="metricFilter" class="select select-bordered select-sm w-full">
-                        <option value="winRate">總勝率</option>
-                        <option value="homeWinRate">主場勝率</option>
-                        <option value="awayWinRate">客場勝率</option>
-                        <option value="netRtg">淨效率值</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div id="view-dashboard" class="hidden animate-fade-in">
             
-            <div class="card bg-base-200 shadow-xl col-span-1 lg:col-span-2 border border-base-300">
-                <div class="card-body p-4">
-                    <h2 class="card-title text-sm uppercase tracking-widest text-base-content/70" id="chartTitle">Efficiency Landscape</h2>
-                    <p id="chartDesc" class="text-xs text-base-content/50 -mt-2 mb-2">X軸: 進攻效率 | Y軸: 防守效率</p>
-                    <div class="chart-wrapper">
-                        <canvas id="scatterChart"></canvas>
+            <div class="bg-base-200 p-4 rounded-xl shadow-sm mb-6 border border-base-300">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <div class="form-control w-full">
+                        <label class="label"><span class="label-text font-bold text-xs uppercase text-base-content/60">Season</span></label>
+                        <select id="seasonFilter" class="select select-bordered select-sm w-full"><option value="ALL">載入中...</option></select>
+                    </div>
+                    <div class="form-control w-full">
+                        <label class="label"><span class="label-text font-bold text-xs uppercase text-base-content/60">Chart Mode</span></label>
+                        <select id="chartMode" class="select select-bordered select-sm w-full">
+                            <option value="efficiency">🏀 攻守效率 (Efficiency)</option>
+                            <option value="homeAway">🏠 主客戰績 (Home/Away)</option>
+                        </select>
+                    </div>
+                    <div class="form-control w-full">
+                        <label class="label"><span class="label-text font-bold text-xs uppercase text-base-content/60">Conference</span></label>
+                        <select id="confFilter" class="select select-bordered select-sm w-full">
+                            <option value="ALL">全部 (All)</option>
+                            <option value="East">東區 (Eastern)</option>
+                            <option value="West">西區 (Western)</option>
+                        </select>
+                    </div>
+                    <div class="form-control w-full">
+                        <label class="label"><span class="label-text font-bold text-xs uppercase text-base-content/60">Division</span></label>
+                        <select id="divFilter" class="select select-bordered select-sm w-full">
+                            <option value="ALL">全部 (All)</option>
+                            <optgroup label="東區 (East)">
+                                <option value="Atlantic">大西洋組</option>
+                                <option value="Central">中央組</option>
+                                <option value="Southeast">東南組</option>
+                            </optgroup>
+                            <optgroup label="西區 (West)">
+                                <option value="Northwest">西北組</option>
+                                <option value="Pacific">太平洋組</option>
+                                <option value="Southwest">西南組</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="form-control w-full">
+                        <label class="label"><span class="label-text font-bold text-xs uppercase text-base-content/60">Sort By</span></label>
+                        <select id="metricFilter" class="select select-bordered select-sm w-full">
+                            <option value="winRate">總勝率 (Win%)</option>
+                            <option value="homeWinRate">主場勝率 (Home%)</option>
+                            <option value="awayWinRate">客場勝率 (Away%)</option>
+                            <option value="netRtg">淨效率值 (Net Rtg)</option>
+                        </select>
                     </div>
                 </div>
             </div>
 
-            <div class="card bg-base-200 shadow-xl h-full border border-base-300">
-                <div class="card-body p-4">
-                    <h3 class="font-bold text-base-content/70 uppercase tracking-widest mb-4">Team Rankings</h3>
-                    
-                    <div class="overflow-x-auto">
-                        <table id="statsTable" class="row-border hover" style="width:100%">
-                            <thead>
-                                <tr>
-                                    <th>RK</th>
-                                    <th>TEAM</th>
-                                    <th>W%</th>
-                                    <th>NET</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                </tbody>
-                        </table>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card bg-base-200 shadow-xl col-span-1 lg:col-span-2 border border-base-300">
+                    <div class="card-body p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="card-title text-sm uppercase tracking-widest text-base-content/70" id="chartTitle">Efficiency Landscape</h2>
+                            <div class="badge badge-ghost text-xs">Click team to view details</div>
+                        </div>
+                        <p id="chartDesc" class="text-xs text-base-content/50 -mt-2 mb-2">X軸: 進攻效率 | Y軸: 防守效率</p>
+                        <div class="chart-wrapper">
+                            <canvas id="scatterChart"></canvas>
+                        </div>
                     </div>
-                    
+                </div>
+
+                <div class="card bg-base-200 shadow-xl h-full border border-base-300">
+                    <div class="card-body p-4">
+                        <h3 class="font-bold text-base-content/70 uppercase tracking-widest mb-4">Team Rankings</h3>
+                        <div class="overflow-x-auto">
+                            <table id="statsTable" class="row-border hover" style="width:100%">
+                                <thead><tr><th>RK</th><th>TEAM</th><th>W%</th><th>NET</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
-<dialog id="team_modal_element" class="modal">
-    <div class="modal-box w-11/12 max-w-4xl bg-base-100 border border-base-300 shadow-2xl">
-        <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" id="modalCloseBtn">✕</button>
-        </form>
-        
-        <div class="flex flex-col sm:flex-row items-center gap-6 border-b border-base-300 pb-4 mb-4">
-            <div class="avatar p-2 bg-white rounded-full">
-                <div class="w-20 rounded-full">
-                    <img id="modalLogo" src="" alt="Team Logo" />
+        <div id="view-detail" class="hidden animate-fade-in pb-10">
+            <button onclick="showDashboard()" class="btn btn-outline btn-sm mb-6 gap-2 group">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                Back to Dashboard
+            </button>
+
+            <div class="card bg-base-200 shadow-xl border border-base-300 mb-8 overflow-hidden relative">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                
+                <div class="card-body flex flex-col md:flex-row items-center md:items-start gap-6 z-10">
+                    <div class="avatar p-4 bg-base-100 rounded-2xl shadow-lg">
+                        <div class="w-24 md:w-32 rounded-xl">
+                            <img id="detailLogo" src="" alt="Team Logo" />
+                        </div>
+                    </div>
+                    <div class="flex-1 text-center md:text-left">
+                        <div class="flex flex-col md:flex-row gap-4 items-center mb-2">
+                            <h1 id="detailTeamName" class="text-3xl md:text-4xl font-black tracking-tight">TEAM NAME</h1>
+                            <div class="flex gap-2">
+                                <span id="detailConf" class="badge badge-lg badge-neutral">Conf</span>
+                                <span id="detailDiv" class="badge badge-lg badge-ghost">Div</span>
+                            </div>
+                        </div>
+                        <p class="text-base-content/60 max-w-2xl text-sm md:text-base">
+                            NBA 2024-25 Season Performance Analysis. displaying real-time efficiency metrics and win/loss trends.
+                        </p>
+                        
+                        <div class="stats bg-base-100 shadow-sm mt-4 border border-base-300 w-full md:w-auto">
+                            <div class="stat place-items-center md:place-items-start px-4 py-2">
+                                <div class="stat-title text-xs">Win Rate</div>
+                                <div id="detailWinRate" class="stat-value text-primary text-2xl">--%</div>
+                            </div>
+                            <div class="stat place-items-center md:place-items-start px-4 py-2 border-l border-base-300">
+                                <div class="stat-title text-xs">Record</div>
+                                <div id="detailRecord" class="stat-value text-base-content text-2xl">--</div>
+                            </div>
+                            <div class="stat place-items-center md:place-items-start px-4 py-2 border-l border-base-300">
+                                <div class="stat-title text-xs">Net Rtg</div>
+                                <div id="detailNetRtg" class="stat-value text-accent text-2xl">--</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="flex-1 text-center sm:text-left">
-                <div class="flex gap-2 justify-center sm:justify-start mb-2">
-                    <select id="modalTeamSelect" class="select select-bordered select-sm select-ghost"></select>
-                    <select id="modalSeasonSelect" class="select select-bordered select-sm select-ghost"></select>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <div class="col-span-1 lg:col-span-1 flex flex-col gap-6">
+                    <div class="card bg-base-200 shadow-xl border border-base-300">
+                        <div class="card-body p-5">
+                            <h3 class="card-title text-sm uppercase tracking-widest text-base-content/70 mb-4">Core Metrics</h3>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="flex justify-between text-sm mb-1">
+                                        <span class="font-bold">Offensive Rtg</span>
+                                        <span id="detailOffVal" class="text-primary font-mono">--</span>
+                                    </div>
+                                    <progress id="detailOffBar" class="progress progress-primary w-full h-2" value="0" max="125"></progress>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-sm mb-1">
+                                        <span class="font-bold">Defensive Rtg</span>
+                                        <span id="detailDefVal" class="text-secondary font-mono">--</span>
+                                    </div>
+                                    <progress id="detailDefBar" class="progress progress-secondary w-full h-2" value="0" max="125"></progress>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-sm mb-1">
+                                        <span class="font-bold">Pace</span>
+                                        <span id="detailPaceVal" class="text-accent font-mono">--</span>
+                                    </div>
+                                    <progress id="detailPaceBar" class="progress progress-accent w-full h-2" value="0" max="110"></progress>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card bg-base-200 shadow-xl border border-base-300">
+                        <div class="card-body p-5">
+                            <h3 class="card-title text-sm uppercase tracking-widest text-base-content/70 mb-4">Home vs Away</h3>
+                            <div class="flex flex-col gap-4">
+                                <div class="bg-base-100 p-3 rounded-lg flex items-center justify-between border-l-4 border-success">
+                                    <div>
+                                        <div class="text-xs text-base-content/60">HOME</div>
+                                        <div id="detailHomeRec" class="font-bold">--</div>
+                                    </div>
+                                    <div id="detailHomePct" class="text-xl font-black text-success">--%</div>
+                                </div>
+                                <div class="bg-base-100 p-3 rounded-lg flex items-center justify-between border-l-4 border-error">
+                                    <div>
+                                        <div class="text-xs text-base-content/60">AWAY</div>
+                                        <div id="detailAwayRec" class="font-bold">--</div>
+                                    </div>
+                                    <div id="detailAwayPct" class="text-xl font-black text-error">--%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <h3 class="text-lg font-bold text-base-content/60">Team Performance Report</h3>
+
+                <div class="col-span-1 lg:col-span-2">
+                    <div class="card bg-base-200 shadow-xl border border-base-300 h-full">
+                        <div class="card-body p-5">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="card-title text-sm uppercase tracking-widest text-base-content/70">Performance Radar</h3>
+                                <select id="detailSeasonSelect" class="select select-bordered select-xs w-32"></select>
+                            </div>
+                            
+                            <div class="relative w-full h-[400px]">
+                                <canvas id="radarChart"></canvas>
+                            </div>
+                            <p class="text-center text-xs text-base-content/40 mt-4">
+                                Comparison against League Average (Gray Dotted Line)
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div>
-                <h3 class="divider divider-start text-xs text-base-content/50">戰力雷達 (Vs League)</h3>
-                <div class="relative h-64 w-full">
-                    <canvas id="radarChart"></canvas>
-                </div>
-            </div>
-            <div class="flex flex-col gap-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="stats shadow bg-base-200">
-                        <div class="stat place-items-center p-2">
-                            <div class="stat-title text-xs">進攻 (Off)</div>
-                            <div class="stat-value text-xl text-primary" id="valOff">--</div>
-                        </div>
-                    </div>
-                    <div class="stats shadow bg-base-200">
-                        <div class="stat place-items-center p-2">
-                            <div class="stat-title text-xs">防守 (Def)</div>
-                            <div class="stat-value text-xl text-secondary" id="valDef">--</div>
-                        </div>
-                    </div>
-                    <div class="stats shadow bg-base-200">
-                        <div class="stat place-items-center p-2">
-                            <div class="stat-title text-xs">淨勝 (Net)</div>
-                            <div class="stat-value text-xl text-accent" id="valNet">--</div>
-                        </div>
-                    </div>
-                    <div class="stats shadow bg-base-200">
-                        <div class="stat place-items-center p-2">
-                            <div class="stat-title text-xs">節奏 (Pace)</div>
-                            <div class="stat-value text-xl" id="valPace">--</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-base-200 p-4 rounded-xl shadow mt-2">
-                    <div class="flex justify-between text-xs mb-1">
-                        <span>🏠 主場勝率</span>
-                        <span id="homeWinVal" class="font-bold">--%</span>
-                    </div>
-                    <progress id="homeBar" class="progress progress-success w-full" value="0" max="100"></progress>
-                    
-                    <div class="flex justify-between text-xs mt-4 mb-1">
-                        <span>✈️ 客場勝率</span>
-                        <span id="awayWinVal" class="font-bold">--%</span>
-                    </div>
-                    <progress id="awayBar" class="progress progress-error w-full" value="0" max="100"></progress>
-                </div>
-            </div>
-        </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-        <button id="modalBackdropBtn">close</button>
-    </form>
-</dialog>
+    </main>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-
     const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTjU7f6Fg_rLg91OktseWM2qlgyRMwDYECHX34jGqCzEfVZWlGcPy5-oZ--x-wB1kKWOv-0bZaoZfPT/pub?output=csv';
-
     const TEAM_INFO = {
-        "ATL": { color: "#E03A3E", conf: "East", div: "Southeast" },
-        "BOS": { color: "#007A33", conf: "East", div: "Atlantic" },
-        "BKN": { color: "#FFFFFF", conf: "East", div: "Atlantic" }, "BRK": { color: "#FFFFFF", conf: "East", div: "Atlantic" },
-        "CHA": { color: "#1D1160", conf: "East", div: "Southeast" }, "CHO": { color: "#1D1160", conf: "East", div: "Southeast" },
-        "CHI": { color: "#CE1141", conf: "East", div: "Central" },
-        "CLE": { color: "#860038", conf: "East", div: "Central" },
-        "DET": { color: "#C8102E", conf: "East", div: "Central" },
-        "IND": { color: "#FDBB30", conf: "East", div: "Central" },
-        "MIA": { color: "#98002E", conf: "East", div: "Southeast" },
-        "MIL": { color: "#00471B", conf: "East", div: "Central" },
-        "NYK": { color: "#F58426", conf: "East", div: "Atlantic" },
-        "ORL": { color: "#0077C0", conf: "East", div: "Southeast" },
-        "PHI": { color: "#006BB6", conf: "East", div: "Atlantic" },
-        "TOR": { color: "#CE1141", conf: "East", div: "Atlantic" },
-        "WAS": { color: "#002B5C", conf: "East", div: "Southeast" },
-        "DAL": { color: "#00538C", conf: "West", div: "Southwest" },
-        "DEN": { color: "#FEC524", conf: "West", div: "Northwest" },
-        "GSW": { color: "#1D428A", conf: "West", div: "Pacific" },
-        "HOU": { color: "#CE1141", conf: "West", div: "Southwest" },
-        "LAC": { color: "#C8102E", conf: "West", div: "Pacific" },
-        "LAL": { color: "#552583", conf: "West", div: "Pacific" },
-        "MEM": { color: "#5D76A9", conf: "West", div: "Southwest" },
-        "MIN": { color: "#236192", conf: "West", div: "Northwest" },
-        "NOP": { color: "#0C2340", conf: "West", div: "Southwest" },
-        "OKC": { color: "#007AC1", conf: "West", div: "Northwest" },
-        "PHX": { color: "#E56020", conf: "West", div: "Pacific" }, "PHO": { color: "#E56020", conf: "West", div: "Pacific" },
-        "POR": { color: "#E03A3E", conf: "West", div: "Northwest" },
-        "SAC": { color: "#5A2D81", conf: "West", div: "Pacific" },
-        "SAS": { color: "#C4CED4", conf: "West", div: "Southwest" },
-        "UTA": { color: "#002B5C", conf: "West", div: "Northwest" }
+        "ATL": { color: "#E03A3E", conf: "East", div: "Southeast", name: "Atlanta Hawks" },
+        "BOS": { color: "#007A33", conf: "East", div: "Atlantic", name: "Boston Celtics" },
+        "BKN": { color: "#FFFFFF", conf: "East", div: "Atlantic", name: "Brooklyn Nets" }, "BRK": { color: "#FFFFFF", conf: "East", div: "Atlantic", name: "Brooklyn Nets" },
+        "CHA": { color: "#1D1160", conf: "East", div: "Southeast", name: "Charlotte Hornets" }, "CHO": { color: "#1D1160", conf: "East", div: "Southeast", name: "Charlotte Hornets" },
+        "CHI": { color: "#CE1141", conf: "East", div: "Central", name: "Chicago Bulls" },
+        "CLE": { color: "#860038", conf: "East", div: "Central", name: "Cleveland Cavaliers" },
+        "DET": { color: "#C8102E", conf: "East", div: "Central", name: "Detroit Pistons" },
+        "IND": { color: "#FDBB30", conf: "East", div: "Central", name: "Indiana Pacers" },
+        "MIA": { color: "#98002E", conf: "East", div: "Southeast", name: "Miami Heat" },
+        "MIL": { color: "#00471B", conf: "East", div: "Central", name: "Milwaukee Bucks" },
+        "NYK": { color: "#F58426", conf: "East", div: "Atlantic", name: "New York Knicks" },
+        "ORL": { color: "#0077C0", conf: "East", div: "Southeast", name: "Orlando Magic" },
+        "PHI": { color: "#006BB6", conf: "East", div: "Atlantic", name: "Philadelphia 76ers" },
+        "TOR": { color: "#CE1141", conf: "East", div: "Atlantic", name: "Toronto Raptors" },
+        "WAS": { color: "#002B5C", conf: "East", div: "Southeast", name: "Washington Wizards" },
+        "DAL": { color: "#00538C", conf: "West", div: "Southwest", name: "Dallas Mavericks" },
+        "DEN": { color: "#FEC524", conf: "West", div: "Northwest", name: "Denver Nuggets" },
+        "GSW": { color: "#1D428A", conf: "West", div: "Pacific", name: "Golden State Warriors" },
+        "HOU": { color: "#CE1141", conf: "West", div: "Southwest", name: "Houston Rockets" },
+        "LAC": { color: "#C8102E", conf: "West", div: "Pacific", name: "LA Clippers" },
+        "LAL": { color: "#552583", conf: "West", div: "Pacific", name: "Los Angeles Lakers" },
+        "MEM": { color: "#5D76A9", conf: "West", div: "Southwest", name: "Memphis Grizzlies" },
+        "MIN": { color: "#236192", conf: "West", div: "Northwest", name: "Minnesota Timberwolves" },
+        "NOP": { color: "#0C2340", conf: "West", div: "Southwest", name: "New Orleans Pelicans" },
+        "OKC": { color: "#007AC1", conf: "West", div: "Northwest", name: "Oklahoma City Thunder" },
+        "PHX": { color: "#E56020", conf: "West", div: "Pacific", name: "Phoenix Suns" }, "PHO": { color: "#E56020", conf: "West", div: "Pacific", name: "Phoenix Suns" },
+        "POR": { color: "#E03A3E", conf: "West", div: "Northwest", name: "Portland Trail Blazers" },
+        "SAC": { color: "#5A2D81", conf: "West", div: "Pacific", name: "Sacramento Kings" },
+        "SAS": { color: "#C4CED4", conf: "West", div: "Southwest", name: "San Antonio Spurs" },
+        "UTA": { color: "#002B5C", conf: "West", div: "Northwest", name: "Utah Jazz" }
     };
 
     const URL_MAP = {
@@ -314,28 +307,24 @@ document.addEventListener('DOMContentLoaded', () => {
         "BRK": "bkn", "CHO": "cha", "PHO": "phx"
     };
 
-    const UNIQUE_TEAMS = [...new Set(Object.keys(TEAM_INFO).filter(t => !["BRK", "CHO", "PHO"].includes(t)))].sort();
-
     let rawData = [];
     let scatterChartInstance = null;
     let radarChartInstance = null;
-    let currentStats = []; 
-    let currentSeasonGames = [];
-    const loadedLogos = {}; 
+    let currentStats = [];
+    let loadedLogos = {}; // For Canvas/Chart.js
+    let currentDetailTeam = null; // Store current team for detail view
 
-    // DataTables 實例
-    let dataTableInstance = null;
-
-    const safeFloat = (v) => {
-        const f = parseFloat(v);
-        return isNaN(f) ? 0 : f;
-    };
+    // Helper functions
+    const safeFloat = (v) => { const f = parseFloat(v); return isNaN(f) ? 0 : f; };
+    const getLogoUrl = (abbr) => `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${(URL_MAP[abbr] || abbr).toLowerCase()}.png`;
 
     window.onload = function() {
         Papa.parse(CSV_URL, {
             download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
             complete: function(results) {
                 rawData = results.data;
+                // Basic data validation and sort
+                rawData = rawData.filter(r => r.Team_Abbr && r.Season_Year);
                 rawData.sort((a, b) => {
                     const dateA = a.date ? String(a.date) : "0";
                     const dateB = b.date ? String(b.date) : "0";
@@ -344,110 +333,177 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 preloadAndResizeLogos().then(() => {
                     initSeasons();
-                    initModalControls();
                     updateLastDate();
                     
+                    // Bind events
                     const bind = (id, evt, func) => { const el = document.getElementById(id); if(el) el.addEventListener(evt, func); };
                     bind('seasonFilter', 'change', updateDashboard);
                     bind('confFilter', 'change', updateDashboard);
                     bind('divFilter', 'change', updateDashboard);
                     bind('metricFilter', 'change', updateDashboard);
                     bind('chartMode', 'change', updateDashboard);
-                    bind('modalCloseBtn', 'click', closeModal);
-                    bind('modalBackdropBtn', 'click', closeModal);
-                    bind('modalTeamSelect', 'change', updateModalContent);
-                    bind('modalSeasonSelect', 'change', updateModalContent);
+                    bind('detailSeasonSelect', 'change', () => goToTeamDetail(currentDetailTeam)); // Refresh detail view on season change
 
-                    updateDashboard(); 
+                    // Initial Load
+                    updateDashboard();
                     document.getElementById('loader').style.display = 'none';
-                    document.getElementById('main-content').classList.remove('hidden');
+                    document.getElementById('view-dashboard').classList.remove('hidden');
                 });
             }
         });
     };
 
-    // ... (preloadAndResizeLogos, updateLastDate, initSeasons, initModalControls, calculateStats 保持不變) ...
+    // --- NAVIGATION FUNCTIONS (SPA LOGIC) ---
+    
+    window.showDashboard = function() {
+        document.getElementById('view-detail').classList.add('hidden');
+        document.getElementById('view-dashboard').classList.remove('hidden');
+        window.scrollTo(0, 0);
+    }
+
+    window.goToTeamDetail = function(teamAbbr) {
+        currentDetailTeam = teamAbbr;
+        const mainSeason = document.getElementById('seasonFilter').value;
+        
+        // Sync detail season selector with main selector if it's the first open
+        const detailSeasonSelect = document.getElementById('detailSeasonSelect');
+        if (detailSeasonSelect.value === "") detailSeasonSelect.value = mainSeason;
+        const selectedSeason = detailSeasonSelect.value;
+
+        // Calculate stats for this team
+        const seasonGames = rawData.filter(r => r.Season_Year == selectedSeason);
+        const allStats = calculateStats(seasonGames);
+        const teamData = allStats.find(t => t.name === teamAbbr);
+
+        if (!teamData) {
+            alert("No data found for this team in selected season.");
+            return;
+        }
+
+        // --- POPULATE DETAIL VIEW ---
+        const info = TEAM_INFO[teamAbbr] || {};
+        
+        // Header
+        document.getElementById('detailLogo').src = getLogoUrl(teamAbbr);
+        document.getElementById('detailTeamName').innerText = info.name || teamAbbr;
+        document.getElementById('detailConf').innerText = info.conf;
+        document.getElementById('detailDiv').innerText = info.div;
+
+        // Top Stats
+        document.getElementById('detailWinRate').innerText = teamData.winRate + "%";
+        
+        // Calculate Record (W-L)
+        let wins = 0, losses = 0;
+        let homeW = 0, homeL = 0;
+        let awayW = 0, awayL = 0;
+
+        seasonGames.forEach(g => {
+            if (g.Team_Abbr === teamAbbr) {
+                if (g.pts > g.opp_pts) { wins++; homeW++; } else { losses++; homeL++; }
+            } else if (g.Opp_Abbr === teamAbbr) {
+                if (g.opp_pts > g.pts) { wins++; awayW++; } else { losses++; awayL++; }
+            }
+        });
+
+        document.getElementById('detailRecord').innerText = `${wins}-${losses}`;
+        
+        const netRtgVal = parseFloat(teamData.netRtg);
+        const netEl = document.getElementById('detailNetRtg');
+        netEl.innerText = (netRtgVal > 0 ? "+" : "") + teamData.netRtg;
+        netEl.className = `stat-value text-2xl ${netRtgVal > 0 ? 'text-success' : 'text-error'}`;
+
+        // Detailed Progress Bars
+        document.getElementById('detailOffVal').innerText = teamData.offRtg;
+        document.getElementById('detailOffBar').value = teamData.offRtg;
+        document.getElementById('detailDefVal').innerText = teamData.defRtg;
+        document.getElementById('detailDefBar').value = teamData.defRtg;
+        document.getElementById('detailPaceVal').innerText = teamData.pace;
+        document.getElementById('detailPaceBar').value = teamData.pace;
+
+        // Home/Away Cards
+        document.getElementById('detailHomeRec').innerText = `${homeW}-${homeL}`;
+        document.getElementById('detailHomePct').innerText = teamData.homeWinRate + "%";
+        document.getElementById('detailAwayRec').innerText = `${awayW}-${awayL}`;
+        document.getElementById('detailAwayPct').innerText = teamData.awayWinRate + "%";
+
+        // Render Radar
+        renderRadarChart(teamData, allStats);
+
+        // --- SWITCH VIEW ---
+        document.getElementById('view-dashboard').classList.add('hidden');
+        document.getElementById('view-detail').classList.remove('hidden');
+        window.scrollTo(0, 0);
+    }
+
+    // --- DATA PROCESSING ---
+
     function preloadAndResizeLogos() {
         const promises = Object.keys(TEAM_INFO).map(teamAbbr => {
-            return new Promise((resolve, reject) => {
-                const urlAbbr = URL_MAP[teamAbbr] || teamAbbr.toLowerCase();
+            return new Promise((resolve) => {
                 const img = new Image();
-                img.crossOrigin = "Anonymous"; 
-                img.src = `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${urlAbbr}.png`;
-                img.onload = () => { 
-                    const size = 40; 
+                img.crossOrigin = "Anonymous";
+                img.src = getLogoUrl(teamAbbr);
+                img.onload = () => {
+                    const size = 40;
                     const canvas = document.createElement('canvas');
-                    canvas.width = size;
-                    canvas.height = size;
+                    canvas.width = size; canvas.height = size;
                     const ctx = canvas.getContext('2d');
-                    ctx.beginPath();
-                    ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
-                    ctx.fillStyle = "white"; 
-                    ctx.fill();
+                    ctx.beginPath(); ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+                    ctx.fillStyle = "white"; ctx.fill();
                     const padding = 5;
                     ctx.drawImage(img, padding, padding, size - padding*2, size - padding*2);
-                    loadedLogos[teamAbbr] = canvas; 
-                    resolve(); 
+                    loadedLogos[teamAbbr] = canvas;
+                    resolve();
                 };
-                img.onerror = () => { resolve(); };
+                img.onerror = () => resolve();
             });
         });
         return Promise.all(promises);
     }
 
-    function updateLastDate() {
-        const dates = rawData.map(r => r.date).filter(d => d);
-        if (dates.length > 0) {
-            document.querySelector('#last-update span').textContent = dates[dates.length - 1];
-        }
-    }
-
     function initSeasons() {
         const years = new Set(rawData.map(r => r.Season_Year).filter(y => y));
         const sorted = Array.from(years).sort().reverse();
+        
+        // Populate Main Filter
         const mainSelect = document.getElementById('seasonFilter');
         mainSelect.innerHTML = "";
         sorted.forEach(y => {
             const opt = document.createElement('option');
-            opt.value = y;
-            opt.textContent = `${y} 賽季`;
+            opt.value = y; opt.innerText = `${y} Season`;
             mainSelect.appendChild(opt);
         });
         if(sorted.length > 0) mainSelect.value = sorted[0];
 
-        const modalSelect = document.getElementById('modalSeasonSelect');
-        modalSelect.innerHTML = "";
+        // Populate Detail Page Filter
+        const detailSelect = document.getElementById('detailSeasonSelect');
+        detailSelect.innerHTML = "";
         sorted.forEach(y => {
             const opt = document.createElement('option');
-            opt.value = y;
-            opt.textContent = `${y}`;
-            modalSelect.appendChild(opt);
+            opt.value = y; opt.innerText = y;
+            detailSelect.appendChild(opt);
         });
     }
 
-    function initModalControls() {
-        const teamSelect = document.getElementById('modalTeamSelect');
-        teamSelect.innerHTML = "";
-        UNIQUE_TEAMS.forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t;
-            opt.textContent = t;
-            teamSelect.appendChild(opt);
-        });
+    function updateLastDate() {
+        const dates = rawData.map(r => r.date).filter(d => d);
+        if (dates.length > 0) {
+            document.querySelector('#last-update span').innerText = dates[dates.length - 1];
+        }
     }
 
     function calculateStats(data) {
         const teams2 = {};
-         const updateTeam2 = (name, offRtg, defRtg, pace) => {
+        const updateTeam2 = (name, off, def, pace) => {
             if (!teams2[name]) teams2[name] = { name: name, gp: 0, wins: 0, homeG: 0, homeW: 0, awayG: 0, awayW: 0, off: 0, def: 0, pace: 0 };
             teams2[name].gp++;
-            if(offRtg) teams2[name].off = safeFloat(offRtg);
-            if(defRtg) teams2[name].def = safeFloat(defRtg);
+            if(off) teams2[name].off = safeFloat(off);
+            if(def) teams2[name].def = safeFloat(def);
             if(pace) teams2[name].pace = safeFloat(pace);
         };
 
         data.forEach(row => {
-             if (row.Team_Abbr) {
+            if (row.Team_Abbr) {
                 updateTeam2(row.Team_Abbr, row.Before_Game_Avg_OffRtg, row.Before_Game_Avg_DefRtg, row.Before_Game_Avg_Pace);
                 const t = teams2[row.Team_Abbr];
                 t.homeG++;
@@ -466,13 +522,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const gp = t.gp || 1;
             const homeG = t.homeG || 1;
             const awayG = t.awayG || 1;
-            const homeWinRate = (t.homeW / homeG * 100);
-            const awayWinRate = (t.awayW / awayG * 100);
             return {
                 name: t.name,
                 winRate: (t.wins/gp*100).toFixed(1),
-                homeWinRate: homeWinRate.toFixed(1),
-                awayWinRate: awayWinRate.toFixed(1),
+                homeWinRate: (t.homeW/homeG*100).toFixed(1),
+                awayWinRate: (t.awayW/awayG*100).toFixed(1),
                 offRtg: t.off.toFixed(1),
                 defRtg: t.def.toFixed(1),
                 netRtg: (t.off - t.def).toFixed(1),
@@ -480,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 color: info.color,
                 conf: info.conf,
                 div: info.div,
-                pointStyle: loadedLogos[t.name] || 'circle', 
+                pointStyle: loadedLogos[t.name] || 'circle',
                 _winRate: t.wins/gp,
                 _homeWinRate: t.homeG > 0 ? t.homeW/t.homeG : 0,
                 _awayWinRate: t.awayG > 0 ? t.awayW/t.awayG : 0,
@@ -499,15 +553,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const metric = document.getElementById('metricFilter').value;
         const chartMode = document.getElementById('chartMode').value;
         
-        currentSeasonGames = rawData.filter(r => r.Season_Year == season);
+        const currentSeasonGames = rawData.filter(r => r.Season_Year == season);
         let stats = calculateStats(currentSeasonGames);
-        currentStats = stats;
 
         let filteredStats = stats;
         if (confFilter !== 'ALL') filteredStats = filteredStats.filter(t => t.conf === confFilter);
         if (divFilter !== 'ALL') filteredStats = filteredStats.filter(t => t.div === divFilter);
 
-        // 圖表排序
         let sortKey = "_winRate";
         if (metric === 'homeWinRate') sortKey = "_homeWinRate";
         if (metric === 'awayWinRate') sortKey = "_awayWinRate";
@@ -518,92 +570,51 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStatsTable(filteredStats, metric);
     }
 
-    // --- 修改：使用 DataTables 渲染表格 ---
     function renderStatsTable(stats, currentMetric) {
-        // 準備 DataTables 需要的數據格式
-        // 每一列是一個物件，包含我們需要顯示的屬性
         const tableData = stats.map((t, index) => {
             let displayWinRate = t.winRate;
             if (currentMetric === 'homeWinRate') displayWinRate = t.homeWinRate;
             if (currentMetric === 'awayWinRate') displayWinRate = t.awayWinRate;
-            
-            return {
-                rank: index + 1,
-                teamObj: t, // 儲存整個物件以便 render 函數使用
-                winRate: displayWinRate,
-                netRtg: t.netRtg
-            };
+            return { rank: index + 1, teamObj: t, winRate: displayWinRate, netRtg: t.netRtg };
         });
 
-        // 如果 DataTables 已經存在，先銷毀它以便重新初始化 (處理欄位變更或資料更新)
-        // 注意：destroy: true 雖然方便，但大量數據時可能有效能問題。這裡數據量小，沒問題。
-        if ($.fn.DataTable.isDataTable('#statsTable')) {
-            $('#statsTable').DataTable().destroy();
-        }
+        if ($.fn.DataTable.isDataTable('#statsTable')) $('#statsTable').DataTable().destroy();
 
-        // 初始化 DataTables
-        dataTableInstance = $('#statsTable').DataTable({
+        $('#statsTable').DataTable({
             data: tableData,
-            destroy: true, // 允許重新初始化
-            pageLength: 10, // 每頁顯示幾筆
-            lengthChange: false, // 隱藏 "顯示 X 筆" 的下拉選單 (保持介面簡潔)
-            searching: true, // 開啟搜尋
-            ordering: true,  // 開啟排序
-            info: true,      // 顯示 "Showing 1 to 10 of..."
+            destroy: true,
+            pageLength: 10,
+            lengthChange: false,
+            searching: true,
+            ordering: true,
+            info: true,
             columns: [
                 { data: 'rank', width: "10%" },
                 { 
-                    data: 'teamObj', 
-                    title: "TEAM",
-                    render: function(data, type, row) {
-                        // 自定義渲染：加入顏色點點
-                        if (type === 'display') {
-                            return `<div class="flex items-center gap-2"><span class="color-dot" style="background:${data.color}"></span>${data.name}</div>`;
-                        }
-                        return data.name; // 用於排序和搜尋時只回傳隊名
-                    }
+                    data: 'teamObj', title: "TEAM",
+                    render: (data, type) => type === 'display' ? 
+                        `<div class="flex items-center gap-2"><span class="color-dot" style="background:${data.color}"></span>${data.name}</div>` : data.name
                 },
+                { data: 'winRate', title: "W%", render: (d, t) => t === 'display' ? `<span class="font-bold">${d}%</span>` : d },
                 { 
-                    data: 'winRate', 
-                    title: "W%",
-                    render: function(data, type) {
-                        return type === 'display' ? `<span class="font-bold">${data}%</span>` : data;
-                    }
-                },
-                { 
-                    data: 'netRtg', 
-                    title: "NET",
-                    render: function(data, type) {
-                        if (type === 'display') {
-                            const num = parseFloat(data);
-                            const colorClass = num > 0 ? 'text-success font-bold' : 'text-error font-bold';
-                            return `<span class="${colorClass}">${num > 0 ? '+' + data : data}</span>`;
+                    data: 'netRtg', title: "NET",
+                    render: (d, t) => {
+                        if (t === 'display') {
+                            const n = parseFloat(d);
+                            return `<span class="${n > 0 ? 'text-success font-bold' : 'text-error font-bold'}">${n > 0 ? '+' + d : d}</span>`;
                         }
-                        return data;
+                        return d;
                     }
                 }
             ],
-            // 點擊行事件：DataTables 特有寫法
-            createdRow: function(row, data, dataIndex) {
-                $(row).on('click', () => {
-                   openTeamModal(data.teamObj.name);
-                });
+            createdRow: function(row, data) {
+                $(row).on('click', () => goToTeamDetail(data.teamObj.name));
                 $(row).css('cursor', 'pointer');
             },
-            // 語言設定 (選用)
-            language: {
-                search: "搜尋球隊:",
-                paginate: {
-                    next: "下一頁",
-                    previous: "上一頁"
-                },
-                info: "顯示 _START_ 到 _END_ 筆 (共 _TOTAL_ 隊)",
-                emptyTable: "無符合資料"
-            }
+            language: { search: "Search Team:", paginate: { next: ">", previous: "<" }, info: "_START_ - _END_ of _TOTAL_", emptyTable: "No Data" }
         });
     }
 
-    // ... (renderScatterChart, openTeamModal, closeModal, updateModalContent, renderRadarChart 保持不變) ...
     function renderScatterChart(stats, mode) {
         const ctx = document.getElementById('scatterChart').getContext('2d');
         if (scatterChartInstance) scatterChartInstance.destroy();
@@ -615,17 +626,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (mode === 'homeAway') {
             chartTitle.textContent = "Home vs Away Performance";
-            chartDesc.textContent = "X軸: 主場勝率 | Y軸: 客場勝率 | 虛線上方為客場更強";
-            xLabel = "Home Win% (主場勝率)"; 
-            yLabel = "Away Win% (客場勝率)";
+            chartDesc.textContent = "X: Home Win% | Y: Away Win% | Above Line = Better Away";
+            xLabel = "Home Win%"; yLabel = "Away Win%";
             points = stats.map(t => ({ x: t._homeWinRate * 100, y: t._awayWinRate * 100, team: t.name, pointStyle: t.pointStyle }));
             lineStart = {x: 0, y: 0}; lineEnd = {x: 100, y: 100};
         } else {
             chartTitle.textContent = "Efficiency Landscape";
-            chartDesc.textContent = "X軸: 進攻效率 | Y軸: 防守效率 | 虛線右上方為強權 (淨勝分 > 0)";
-            xLabel = "Off Rtg (進攻)"; 
-            yLabel = "Def Rtg (防守)"; 
-            revY = true;
+            chartDesc.textContent = "X: Off Rtg | Y: Def Rtg (Inverted) | Top Right = Elite";
+            xLabel = "Off Rtg"; yLabel = "Def Rtg"; revY = true;
             points = stats.map(t => ({ x: t._offRtg, y: t._defRtg, team: t.name, pointStyle: t.pointStyle }));
             const allVals = points.map(p => p.x).concat(points.map(p => p.y));
             const minVal = Math.floor(Math.min(...allVals) - 2);
@@ -633,202 +641,76 @@ document.addEventListener('DOMContentLoaded', () => {
             lineStart = {x: minVal, y: minVal}; lineEnd = {x: maxVal, y: maxVal};
         }
 
-        const referenceLine = {
-            label: '1:1 Reference',
-            data: [lineStart, lineEnd],
-            type: 'line',
-            borderColor: '#555',
-            borderWidth: 2,
-            borderDash: [5, 5],
-            pointRadius: 0,
-            fill: false,
-            zIndex: 0
-        };
-
-        Chart.defaults.color = '#a6adbb'; 
-        Chart.defaults.borderColor = '#333';
-
+        Chart.defaults.color = '#a6adbb'; Chart.defaults.borderColor = '#333';
         scatterChartInstance = new Chart(ctx, {
             type: 'scatter',
             data: {
                 labels: stats.map(t => t.name),
                 datasets: [
-                    {
-                        label: 'Team Data',
-                        data: points,
-                        pointStyle: (ctx) => ctx.raw.pointStyle, 
-                        pointRadius: 6,       
-                        pointHoverRadius: 10,
-                        borderWidth: 0,
-                        zIndex: 2
-                    },
-                    referenceLine
+                    { label: 'Team', data: points, pointStyle: ctx => ctx.raw.pointStyle, pointRadius: 6, pointHoverRadius: 10, borderWidth: 0 },
+                    { label: 'Ref', data: [lineStart, lineEnd], type: 'line', borderColor: '#555', borderDash: [5, 5], pointRadius: 0, fill: false }
                 ]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                responsive: true, maintainAspectRatio: false,
                 onClick: (evt, elements) => {
                     if (elements.length > 0 && elements[0].datasetIndex === 0) {
-                        openTeamModal(stats[elements[0].index].name);
+                        goToTeamDetail(stats[elements[0].index].name);
                     }
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function(ctx) { 
-                                if(ctx.dataset.type === 'line') return null;
-                                const p = ctx.raw;
-                                return `${p.team}: X=${p.x.toFixed(1)}, Y=${p.y.toFixed(1)}`; 
-                            }
-                        },
-                        backgroundColor: 'rgba(0,0,0,0.9)',
-                        titleFont: { size: 14 }
-                    }
-                },
+                onHover: (e, el) => e.native.target.style.cursor = el[0] ? 'pointer' : 'default',
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.type === 'line' ? null : `${c.raw.team}` } } },
                 scales: {
                     x: { title: { display: true, text: xLabel, color: '#aaa' }, grid: { color: '#333' } },
-                    y: { 
-                        title: { display: true, text: yLabel, color: '#aaa' }, 
-                        grid: { color: '#333' }, 
-                        reverse: revY 
-                    }
+                    y: { title: { display: true, text: yLabel, color: '#aaa' }, grid: { color: '#333' }, reverse: revY }
                 }
             }
         });
     }
 
-    function openTeamModal(teamName) {
-        const currentSeason = document.getElementById('seasonFilter').value;
-        document.getElementById('modalTeamSelect').value = teamName;
-        document.getElementById('modalSeasonSelect').value = currentSeason;
-        const modal = document.getElementById('team_modal_element');
-        modal.classList.add('modal-open');
-        updateModalContent();
-    }
-
-    function closeModal() {
-        const modal = document.getElementById('team_modal_element');
-        modal.classList.remove('modal-open');
-    }
-
-    function updateModalContent() {
-        const selectedTeam = document.getElementById('modalTeamSelect').value;
-        const selectedSeason = document.getElementById('modalSeasonSelect').value;
-        const modalSeasonGames = rawData.filter(r => r.Season_Year == selectedSeason);
-        const seasonStats = calculateStats(modalSeasonGames);
-        const teamData = seasonStats.find(t => t.name === selectedTeam);
-
-        if (!teamData) { return; }
-
-        document.getElementById('modalLogo').src = `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${(URL_MAP[selectedTeam]||selectedTeam).toLowerCase()}.png`;
-        document.getElementById('valOff').textContent = teamData.offRtg;
-        document.getElementById('valDef').textContent = teamData.defRtg;
-        document.getElementById('valNet').textContent = (teamData.netRtg > 0 ? '+':'') + teamData.netRtg;
-        document.getElementById('valPace').textContent = teamData.pace;
-
-        const homePct = Math.round(teamData._homeWinRate * 100);
-        const awayPct = Math.round(teamData._awayWinRate * 100);
-
-        let homeW=0, homeG=0, awayW=0, awayG=0;
-        modalSeasonGames.forEach(g => {
-            if (g.Team_Abbr === selectedTeam) {
-                homeG++;
-                if (g.pts > g.opp_pts) homeW++;
-            }
-            else if (g.Opp_Abbr === selectedTeam) {
-                awayG++;
-                if (g.opp_pts > g.pts) awayW++; 
-            }
-        });
-
-        document.getElementById('homeWinVal').textContent = `${homePct}% (${homeW}-${homeG-homeW})`;
-        document.getElementById('homeBar').value = homePct;
-        document.getElementById('awayWinVal').textContent = `${awayPct}% (${awayW}-${awayG-awayW})`;
-        document.getElementById('awayBar').value = awayPct;
-
-        renderRadarChart(teamData, seasonStats);
-    }
-
     function renderRadarChart(teamData, allStats) {
         const ctx = document.getElementById('radarChart').getContext('2d');
         if (radarChartInstance) radarChartInstance.destroy();
-
-        const validStats = allStats.filter(t => !isNaN(t._offRtg) && !isNaN(t._defRtg));
         
-        const maxOff = Math.max(...validStats.map(t => t._offRtg)) || 120;
-        const minOff = Math.min(...validStats.map(t => t._offRtg)) || 100;
-        const maxDef = Math.max(...validStats.map(t => t._defRtg)) || 120; 
-        const minDef = Math.min(...validStats.map(t => t._defRtg)) || 100; 
-        const maxWin = Math.max(...validStats.map(t => t._winRate)) || 1;
-        const minWin = Math.min(...validStats.map(t => t._winRate)) || 0;
-        const maxNet = Math.max(...validStats.map(t => t._netRtg)) || 15; 
-        const minNet = Math.min(...validStats.map(t => t._netRtg)) || -15;
-        const maxPace = Math.max(...validStats.map(t => t._pace)) || 105; 
-        const minPace = Math.min(...validStats.map(t => t._pace)) || 90;
+        // Safety check
+        if (!teamData) return;
 
-        const norm = (val, min, max) => {
-            if (max === min) return 50;
-            let res = (val - min) / (max - min) * 100;
-            return Math.max(0, Math.min(100, res)); 
-        };
-        const normRev = (val, min, max) => {
-            if (max === min) return 50;
-            let res = (max - val) / (max - min) * 100;
-            return Math.max(0, Math.min(100, res));
-        };
+        const validStats = allStats.filter(t => !isNaN(t._offRtg));
+        const norm = (val, min, max) => Math.max(0, Math.min(100, (val - min) / (max - min) * 100));
+        const normRev = (val, min, max) => Math.max(0, Math.min(100, (max - val) / (max - min) * 100));
 
-        const scoreOff = norm(teamData._offRtg, minOff, maxOff);
-        const scoreDef = normRev(teamData._defRtg, minDef, maxDef);
-        const scoreWin = norm(teamData._winRate, minWin, maxWin);
-        const scoreNet = norm(teamData._netRtg, minNet, maxNet); 
-        const scorePace = norm(teamData._pace, minPace, maxPace);
+        const getMinMax = (key) => [Math.min(...validStats.map(t => t[key])), Math.max(...validStats.map(t => t[key]))];
+        const [minOff, maxOff] = getMinMax('_offRtg');
+        const [minDef, maxDef] = getMinMax('_defRtg');
+        const [minWin, maxWin] = getMinMax('_winRate');
+        const [minNet, maxNet] = getMinMax('_netRtg');
+        const [minPace, maxPace] = getMinMax('_pace');
+
+        const dataPoints = [
+            norm(teamData._offRtg, minOff, maxOff),
+            normRev(teamData._defRtg, minDef, maxDef),
+            norm(teamData._winRate, minWin, maxWin),
+            norm(teamData._netRtg, minNet, maxNet),
+            norm(teamData._pace, minPace, maxPace)
+        ];
 
         radarChartInstance = new Chart(ctx, {
             type: 'radar',
             data: {
-                labels: ['進攻', '防守', '勝率', '淨勝分', '節奏'],
+                labels: ['Offense', 'Defense', 'Win%', 'Net Rtg', 'Pace'],
                 datasets: [
-                    {
-                        label: teamData.name,
-                        data: [scoreOff, scoreDef, scoreWin, scoreNet, scorePace],
-                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-                        borderColor: '#3b82f6',
-                        pointBackgroundColor: '#fff',
-                        zIndex: 2
-                    },
-                    {
-                        label: 'League Avg',
-                        data: [50, 50, 50, 50, 50],
-                        borderColor: '#666',
-                        borderDash: [5, 5],
-                        borderWidth: 1,
-                        pointRadius: 0,
-                        backgroundColor: 'transparent',
-                        zIndex: 1
-                    }
+                    { label: teamData.name, data: dataPoints, backgroundColor: 'rgba(59, 130, 246, 0.5)', borderColor: '#3b82f6', pointBackgroundColor: '#fff' },
+                    { label: 'League Avg', data: [50, 50, 50, 50, 50], borderColor: '#666', borderDash: [5, 5], borderWidth: 1, pointRadius: 0, backgroundColor: 'transparent' }
                 ]
             },
             options: {
                 maintainAspectRatio: false,
-                scales: {
-                    r: {
-                        angleLines: { color: '#777' },
-                        grid: { color: '#777' },
-                        pointLabels: { color: '#ccc', font: { size: 12 } },
-                        suggestedMin: 0,
-                        suggestedMax: 100,
-                        ticks: { display: false }
-                    }
-                },
+                scales: { r: { angleLines: { color: '#777' }, grid: { color: '#444' }, pointLabels: { color: '#ccc', font: { size: 12 } }, suggestedMin: 0, suggestedMax: 100, ticks: { display: false } } },
                 plugins: { legend: { display: false } }
             }
         });
     }
-
 });
 </script>
-
 </body>
 </html>
