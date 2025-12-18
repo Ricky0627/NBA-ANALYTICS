@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NBA 戰情室 (SPA版)</title>
+    <title>NBA 戰情室 (SPA 完美修復版)</title>
     
     <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,15 +14,13 @@
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 
     <style>
-        /* 圖表容器高度 */
         .chart-wrapper { position: relative; height: 60vh; min-height: 400px; width: 100%; }
         .color-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; }
         
-        /* 動畫效果 */
         .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* --- DataTables 深色模式適配 --- */
+        /* DataTables 深色模式適配 */
         .dataTables_wrapper .dataTables_length, 
         .dataTables_wrapper .dataTables_filter, 
         .dataTables_wrapper .dataTables_info, 
@@ -35,7 +33,7 @@
         }
         table.dataTable thead th, table.dataTable thead td { border-bottom: 1px solid hsl(var(--bc) / 0.2) !important; color: hsl(var(--bc) / 0.8); }
         table.dataTable tbody tr { background-color: hsl(var(--b2)) !important; color: hsl(var(--bc)); }
-        table.dataTable tbody tr:hover { background-color: hsl(var(--b3)) !important; }
+        table.dataTable tbody tr:hover { background-color: hsl(var(--b3)) !important; cursor: pointer; }
         table.dataTable.no-footer { border-bottom: 1px solid hsl(var(--bc) / 0.2) !important; }
         .dataTables_wrapper .dataTables_paginate .paginate_button.current { background: hsl(var(--p)) !important; color: hsl(var(--pc)) !important; border: none !important; }
         .dataTables_wrapper .dataTables_paginate .paginate_button:hover { background: hsl(var(--pf)) !important; border: none !important; color: white !important; }
@@ -144,7 +142,9 @@
 
         <div id="view-detail" class="hidden animate-fade-in pb-10">
             <button onclick="showDashboard()" class="btn btn-outline btn-sm mb-6 gap-2 group">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                </svg>
                 Back to Dashboard
             </button>
 
@@ -166,7 +166,7 @@
                             </div>
                         </div>
                         <p class="text-base-content/60 max-w-2xl text-sm md:text-base">
-                            NBA 2024-25 Season Performance Analysis. displaying real-time efficiency metrics and win/loss trends.
+                            Season Performance Analysis. displaying real-time efficiency metrics, win/loss trends, and radar comparison against league average.
                         </p>
                         
                         <div class="stats bg-base-100 shadow-sm mt-4 border border-base-300 w-full md:w-auto">
@@ -268,7 +268,10 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // 核心數據源
     const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTjU7f6Fg_rLg91OktseWM2qlgyRMwDYECHX34jGqCzEfVZWlGcPy5-oZ--x-wB1kKWOv-0bZaoZfPT/pub?output=csv';
+    
+    // 球隊基本資訊與配色
     const TEAM_INFO = {
         "ATL": { color: "#E03A3E", conf: "East", div: "Southeast", name: "Atlanta Hawks" },
         "BOS": { color: "#007A33", conf: "East", div: "Atlantic", name: "Boston Celtics" },
@@ -310,11 +313,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let rawData = [];
     let scatterChartInstance = null;
     let radarChartInstance = null;
-    let currentStats = [];
-    let loadedLogos = {}; // For Canvas/Chart.js
-    let currentDetailTeam = null; // Store current team for detail view
+    let loadedLogos = {}; // 快取隊徽 Canvas
+    let currentDetailTeam = null; // 當前詳細頁的球隊
 
-    // Helper functions
     const safeFloat = (v) => { const f = parseFloat(v); return isNaN(f) ? 0 : f; };
     const getLogoUrl = (abbr) => `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${(URL_MAP[abbr] || abbr).toLowerCase()}.png`;
 
@@ -323,7 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
             download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
             complete: function(results) {
                 rawData = results.data;
-                // Basic data validation and sort
                 rawData = rawData.filter(r => r.Team_Abbr && r.Season_Year);
                 rawData.sort((a, b) => {
                     const dateA = a.date ? String(a.date) : "0";
@@ -335,16 +335,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     initSeasons();
                     updateLastDate();
                     
-                    // Bind events
                     const bind = (id, evt, func) => { const el = document.getElementById(id); if(el) el.addEventListener(evt, func); };
                     bind('seasonFilter', 'change', updateDashboard);
                     bind('confFilter', 'change', updateDashboard);
                     bind('divFilter', 'change', updateDashboard);
                     bind('metricFilter', 'change', updateDashboard);
                     bind('chartMode', 'change', updateDashboard);
-                    bind('detailSeasonSelect', 'change', () => goToTeamDetail(currentDetailTeam)); // Refresh detail view on season change
+                    // 詳細頁如果切換年份，也刷新詳細頁
+                    bind('detailSeasonSelect', 'change', () => goToTeamDetail(currentDetailTeam, false)); 
 
-                    // Initial Load
                     updateDashboard();
                     document.getElementById('loader').style.display = 'none';
                     document.getElementById('view-dashboard').classList.remove('hidden');
@@ -353,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // --- NAVIGATION FUNCTIONS (SPA LOGIC) ---
+    // --- 頁面導航邏輯 (SPA) ---
     
     window.showDashboard = function() {
         document.getElementById('view-detail').classList.add('hidden');
@@ -361,42 +360,42 @@ document.addEventListener('DOMContentLoaded', () => {
         window.scrollTo(0, 0);
     }
 
-    window.goToTeamDetail = function(teamAbbr) {
+    // ★★★ 核心修改：邏輯順序調整與年份同步 ★★★
+    window.goToTeamDetail = function(teamAbbr, syncFromMain = true) {
         currentDetailTeam = teamAbbr;
-        const mainSeason = document.getElementById('seasonFilter').value;
         
-        // Sync detail season selector with main selector if it's the first open
+        // 1. 同步年份邏輯
         const detailSeasonSelect = document.getElementById('detailSeasonSelect');
-        if (detailSeasonSelect.value === "") detailSeasonSelect.value = mainSeason;
+        if (syncFromMain) {
+            const mainSeason = document.getElementById('seasonFilter').value;
+            if (detailSeasonSelect.querySelector(`option[value="${mainSeason}"]`)) {
+                detailSeasonSelect.value = mainSeason;
+            }
+        }
+        
         const selectedSeason = detailSeasonSelect.value;
 
-        // Calculate stats for this team
+        // 2. 準備數據
         const seasonGames = rawData.filter(r => r.Season_Year == selectedSeason);
         const allStats = calculateStats(seasonGames);
         const teamData = allStats.find(t => t.name === teamAbbr);
 
         if (!teamData) {
-            alert("No data found for this team in selected season.");
+            alert(`在 ${selectedSeason} 賽季中找不到 ${teamAbbr} 的數據`);
             return;
         }
 
-        // --- POPULATE DETAIL VIEW ---
+        // 3. 填充文字與 DOM (Logo, Progress Bars, Text...)
         const info = TEAM_INFO[teamAbbr] || {};
         
-        // Header
         document.getElementById('detailLogo').src = getLogoUrl(teamAbbr);
         document.getElementById('detailTeamName').innerText = info.name || teamAbbr;
         document.getElementById('detailConf').innerText = info.conf;
         document.getElementById('detailDiv').innerText = info.div;
 
-        // Top Stats
         document.getElementById('detailWinRate').innerText = teamData.winRate + "%";
         
-        // Calculate Record (W-L)
-        let wins = 0, losses = 0;
-        let homeW = 0, homeL = 0;
-        let awayW = 0, awayL = 0;
-
+        let wins = 0, losses = 0, homeW = 0, homeL = 0, awayW = 0, awayL = 0;
         seasonGames.forEach(g => {
             if (g.Team_Abbr === teamAbbr) {
                 if (g.pts > g.opp_pts) { wins++; homeW++; } else { losses++; homeL++; }
@@ -412,7 +411,6 @@ document.addEventListener('DOMContentLoaded', () => {
         netEl.innerText = (netRtgVal > 0 ? "+" : "") + teamData.netRtg;
         netEl.className = `stat-value text-2xl ${netRtgVal > 0 ? 'text-success' : 'text-error'}`;
 
-        // Detailed Progress Bars
         document.getElementById('detailOffVal').innerText = teamData.offRtg;
         document.getElementById('detailOffBar').value = teamData.offRtg;
         document.getElementById('detailDefVal').innerText = teamData.defRtg;
@@ -420,22 +418,22 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detailPaceVal').innerText = teamData.pace;
         document.getElementById('detailPaceBar').value = teamData.pace;
 
-        // Home/Away Cards
         document.getElementById('detailHomeRec').innerText = `${homeW}-${homeL}`;
         document.getElementById('detailHomePct').innerText = teamData.homeWinRate + "%";
         document.getElementById('detailAwayRec').innerText = `${awayW}-${awayL}`;
         document.getElementById('detailAwayPct').innerText = teamData.awayWinRate + "%";
 
-        // Render Radar
-        renderRadarChart(teamData, allStats);
-
-        // --- SWITCH VIEW ---
+        // ★★★ 關鍵修改：先顯示頁面，再畫圖 ★★★
+        // Chart.js 需要 Canvas 是可見的 (有寬高) 才能渲染
         document.getElementById('view-dashboard').classList.add('hidden');
         document.getElementById('view-detail').classList.remove('hidden');
         window.scrollTo(0, 0);
+
+        // 頁面顯示後，立刻畫圖
+        renderRadarChart(teamData, allStats);
     }
 
-    // --- DATA PROCESSING ---
+    // --- 數據處理函式 ---
 
     function preloadAndResizeLogos() {
         const promises = Object.keys(TEAM_INFO).map(teamAbbr => {
@@ -465,24 +463,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const years = new Set(rawData.map(r => r.Season_Year).filter(y => y));
         const sorted = Array.from(years).sort().reverse();
         
-        // Populate Main Filter
         const mainSelect = document.getElementById('seasonFilter');
         mainSelect.innerHTML = "";
-        sorted.forEach(y => {
-            const opt = document.createElement('option');
-            opt.value = y; opt.innerText = `${y} Season`;
-            mainSelect.appendChild(opt);
-        });
-        if(sorted.length > 0) mainSelect.value = sorted[0];
-
-        // Populate Detail Page Filter
+        
         const detailSelect = document.getElementById('detailSeasonSelect');
         detailSelect.innerHTML = "";
+
         sorted.forEach(y => {
-            const opt = document.createElement('option');
-            opt.value = y; opt.innerText = y;
-            detailSelect.appendChild(opt);
+            // Main Filter
+            const opt1 = document.createElement('option');
+            opt1.value = y; opt1.innerText = `${y} Season`;
+            mainSelect.appendChild(opt1);
+
+            // Detail Filter
+            const opt2 = document.createElement('option');
+            opt2.value = y; opt2.innerText = y;
+            detailSelect.appendChild(opt2);
         });
+
+        if(sorted.length > 0) mainSelect.value = sorted[0];
     }
 
     function updateLastDate() {
@@ -608,7 +607,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             ],
             createdRow: function(row, data) {
-                $(row).on('click', () => goToTeamDetail(data.teamObj.name));
+                // 點擊表格也同步
+                $(row).on('click', () => goToTeamDetail(data.teamObj.name, true));
                 $(row).css('cursor', 'pointer');
             },
             language: { search: "Search Team:", paginate: { next: ">", previous: "<" }, info: "_START_ - _END_ of _TOTAL_", emptyTable: "No Data" }
@@ -655,7 +655,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 responsive: true, maintainAspectRatio: false,
                 onClick: (evt, elements) => {
                     if (elements.length > 0 && elements[0].datasetIndex === 0) {
-                        goToTeamDetail(stats[elements[0].index].name);
+                        // 點擊圖表也同步
+                        goToTeamDetail(stats[elements[0].index].name, true);
                     }
                 },
                 onHover: (e, el) => e.native.target.style.cursor = el[0] ? 'pointer' : 'default',
@@ -672,7 +673,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = document.getElementById('radarChart').getContext('2d');
         if (radarChartInstance) radarChartInstance.destroy();
         
-        // Safety check
         if (!teamData) return;
 
         const validStats = allStats.filter(t => !isNaN(t._offRtg));
